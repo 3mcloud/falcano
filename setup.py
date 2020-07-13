@@ -10,7 +10,7 @@ NAME = 'falcano'
 VERSION = '0.1'
 AUTHOR = 'Eric Walker'
 AUTHOR_EMAIL = 'ewalker3@mmm.com'
-DESCRIPTION = 'Falcono'
+DESCRIPTION = 'Falcano'
 URL = 'https://github.com/3mcloud/falcano'
 REQUIRES = [
     'bottle==0.12.18',
