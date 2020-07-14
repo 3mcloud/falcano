@@ -105,7 +105,7 @@ for item in TestModel.view_index.query(0):
 
 It's simple!
 
-Want to use DynamoDB local? Just add a `host` name attribute and specify your local server.
+Want to use DynamoDB local? Add a `host` name attribute and specify your local server.
 
 ```python
 from falcano.models import Model
