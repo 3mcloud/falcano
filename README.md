@@ -126,7 +126,7 @@ class User(Model):
 
 ## Single-Table Design Usage
 
-Want to follow single-table design, with and index and rename the `Type` attribute? No problem:
+Want to follow single-table design with an index and rename the `Type` attribute? No problem:
 
 ```python
 from falcano.model import Model
