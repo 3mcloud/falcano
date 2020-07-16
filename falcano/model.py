@@ -14,6 +14,7 @@ import stringcase
 import boto3
 import botocore
 from falcano.settings import get_settings_value
+from falcano.expressions.condition import Condition
 from falcano.indexes import Index, GlobalSecondaryIndex
 from falcano.paginator import Results
 from falcano.attributes import (
@@ -22,12 +23,13 @@ from falcano.attributes import (
     MapAttribute,
     TTLAttribute
 )
+from falcano.util import snake_to_camel_case
 from falcano.constants import (
     BATCH_WRITE_PAGE_LIMIT, DELETE, PUT, ATTR_TYPE_MAP, ATTR_NAME, ATTR_TYPE, RANGE, HASH,
     BILLING_MODE, GLOBAL_SECONDARY_INDEXES, LOCAL_SECONDARY_INDEXES, READ_CAPACITY_UNITS,
     WRITE_CAPACITY_UNITS, PROJECTION, INDEX_NAME, PROJECTION_TYPE, PAY_PER_REQUEST_BILLING_MODE,
     ATTRIBUTES, META_CLASS_NAME, REGION, HOST, ATTR_DEFINITIONS, KEY_SCHEMA, KEY_TYPE, TABLE_NAME,
-    PROVISIONED_THROUGHPUT, NON_KEY_ATTRIBUTES
+    PROVISIONED_THROUGHPUT, NON_KEY_ATTRIBUTES, RANGE_KEY
 )
 
 logger = logging.getLogger('entity-base')  # pylint: disable=invalid-name
@@ -521,6 +523,18 @@ class Model(metaclass=MetaModel):
             attrs[range_key.attr_name] = getattr(self, range_key.attr_name)
         return attrs
 
+    def _get_save_args(self, attributes=True, null_check=True):
+        kwargs = {}
+        serialized = self._serialize(attributes, null_check=null_check)
+        hash_key = self.get_hash_key()
+        range_key = self.get_range_key()
+        args = (hash_key, )
+        if range_key is not None:
+            kwargs = kwargs[snake_to_camel_case(RANGE_KEY)]
+        if attributes:
+            kwargs[snake_to_camel_case(ATTRIBUTES)] = serialized[snake_to_camel_case(ATTRIBUTES)]
+        return args, kwargs
+
     @classmethod
     def _serialize_value(cls, attr, value):  # , null_check=True):
         '''
@@ -594,6 +608,17 @@ class Model(metaclass=MetaModel):
 
     # def TypeIndex(self):
     #     pass
+
+    def save(self, condition: Optional[Condition] = None) -> Dict[str, Any]:
+        ''' Save a falcano model into dynamodb '''
+        args, kwargs = self._get_save_args()
+        # version_condition = self._handle_version_attribute(serialized_attributes=kwargs)
+        # if version_condition is not None:
+        #     condition &= version_condition
+        # kwargs.update(condition=condition)
+        # data = self._get_connection().put_item(*args, **kwargs)
+        # self.update_local_version_attribute()
+        return data
 
     def to_dict(self, primary_key: str = 'PK'):
         '''Convert a pynamo model into a dictionary for JSON serialization'''
