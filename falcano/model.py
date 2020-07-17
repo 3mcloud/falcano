@@ -414,6 +414,8 @@ class Model(metaclass=MetaModel):
         '''
         Provides a high level scan API
         '''
+        table = cls.connection().describe_table(TableName=cls.Meta.table_name)
+        res = table.scan()
         print(kwargs)
         return iter([])
 
@@ -602,17 +604,21 @@ class Model(metaclass=MetaModel):
         '''
         return BatchWrite(cls, auto_commit=auto_commit)
 
-    @classmethod
-    def delete(cls, **kwargs):
-        pass
+    def delete(self, condition: Optional[Condition] =  None) -> Any:
+        kwargs = {}
+        table = self.resource().Table(self.Meta.table_name)
+        kwargs['Key'] = self._get_keys()
+        return table.delete_item(**kwargs)
 
     def save(self, condition: Optional[Condition] = None) -> Dict[str, Any]:
         ''' Save a falcano model into dynamodb '''
-        items = self._serialize()[ATTRIBUTES]
+        kwargs = {}
+        kwargs['Item'] = self._serialize()[ATTRIBUTES]
+        if condition: 
+            kwargs['Condition'] = condition
 
-        # kwargs.update(condition=condition)
         table = self.resource().Table(self.Meta.table_name)
-        data = table.put_item(Item=items)
+        data = table.put_item(**kwargs)
         return data
 
     def to_dict(self, primary_key: str = 'PK'):

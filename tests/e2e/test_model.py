@@ -25,6 +25,8 @@ def test_model_integration(monkeypatch):
 
     obj = TestModel('1', '2')
     obj.save()
+    obj.delete()
+
     # obj.refresh()
     # obj = TestModel('foo', 'bar')
     # obj.save()
