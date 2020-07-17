@@ -1,0 +1,29 @@
+# Development compose file only
+# Do not use for production
+version: "3.7"
+services:
+  falcano-develop:
+    command: ["tail", "-f", "/dev/null"]
+    image: falcano:test
+    ports:
+      - 5678:5678
+    environment:
+      ENDPOINT_URL: http://dynamodb-local:8000/
+      AWS_DEFAULT_REGION: us-east-1
+    volumes:
+      - type: bind
+        source: ./
+        target: /work
+    depends_on:
+      - dynamodb-local
+  dynamodb-local:
+    image: amazon/dynamodb-local
+    ports:
+      # For local debugging only
+      # Go to localhost:8000/shell
+      - 8000:8000
+    command: -jar DynamoDBLocal.jar -sharedDb -dbPath /home/dynamodblocal/data/
+    volumes:
+      - type: bind
+        source: ./data/dynamodb
+        target: /home/dynamodblocal/data

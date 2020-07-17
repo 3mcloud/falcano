@@ -17,13 +17,14 @@ from falcano.settings import get_settings_value
 from falcano.expressions.condition import Condition
 from falcano.indexes import Index, GlobalSecondaryIndex
 from falcano.paginator import Results
+from falcano.exceptions import TableDoesNotExist
 from falcano.attributes import (
     Attribute,
     AttributeContainerMeta,
     MapAttribute,
     TTLAttribute
 )
-from falcano.util import snake_to_camel_case
+
 from falcano.constants import (
     BATCH_WRITE_PAGE_LIMIT, DELETE, PUT, ATTR_TYPE_MAP, ATTR_NAME, ATTR_TYPE, RANGE, HASH,
     BILLING_MODE, GLOBAL_SECONDARY_INDEXES, LOCAL_SECONDARY_INDEXES, READ_CAPACITY_UNITS,
@@ -417,6 +418,17 @@ class Model(metaclass=MetaModel):
         return iter([])
 
     @classmethod
+    def exists(cls) -> bool:
+        """
+        Returns True if this table exists, False otherwise
+        """
+        try:
+            cls.connection().describe_table(TableName=cls.Meta.table_name)
+            return True
+        except cls.connection().exceptions.ResourceNotFoundException:
+            return False
+
+    @classmethod
     def query(cls,
               hash_key,
               range_key_condition=None,
@@ -490,8 +502,7 @@ class Model(metaclass=MetaModel):
         :param attr_map: If True, then attributes are returned
         :param null_check: If True, then attributes are checked for null
         '''
-        attributes = stringcase.camelcase(ATTRIBUTES)
-        attrs: Dict[str, Dict] = {attributes: {}}
+        attrs: Dict[str, Dict] = {ATTRIBUTES: {}}
         for name, attr in self.get_attributes():
             value = getattr(self, name)
             if isinstance(value, MapAttribute):
@@ -503,10 +514,11 @@ class Model(metaclass=MetaModel):
             serialized = value
             if serialized is None and not attr.null and null_check:
                 raise ValueError(f"Attribute '{attr.attr_name}' cannot be None")
-            if attr_map:
-                raise Exception('Unsupported argument: attr_map')
 
-            attrs[attributes][attr.attr_name] = serialized
+            if attr_map:
+                logger.warning('Unsupported argument: attr_map')
+
+            attrs[ATTRIBUTES][attr.attr_name] = serialized
 
         return attrs
 
@@ -522,18 +534,6 @@ class Model(metaclass=MetaModel):
         if range_key is not None:
             attrs[range_key.attr_name] = getattr(self, range_key.attr_name)
         return attrs
-
-    def _get_save_args(self, attributes=True, null_check=True):
-        kwargs = {}
-        serialized = self._serialize(attributes, null_check=null_check)
-        hash_key = self.get_hash_key()
-        range_key = self.get_range_key()
-        args = (hash_key, )
-        if range_key is not None:
-            kwargs = kwargs[snake_to_camel_case(RANGE_KEY)]
-        if attributes:
-            kwargs[snake_to_camel_case(ATTRIBUTES)] = serialized[snake_to_camel_case(ATTRIBUTES)]
-        return args, kwargs
 
     @classmethod
     def _serialize_value(cls, attr, value):  # , null_check=True):
@@ -602,22 +602,17 @@ class Model(metaclass=MetaModel):
         '''
         return BatchWrite(cls, auto_commit=auto_commit)
 
-    # @classmethod
-    # def delete(cls, **kwargs):
-    #     pass
-
-    # def TypeIndex(self):
-    #     pass
+    @classmethod
+    def delete(cls, **kwargs):
+        pass
 
     def save(self, condition: Optional[Condition] = None) -> Dict[str, Any]:
         ''' Save a falcano model into dynamodb '''
-        args, kwargs = self._get_save_args()
-        # version_condition = self._handle_version_attribute(serialized_attributes=kwargs)
-        # if version_condition is not None:
-        #     condition &= version_condition
+        items = self._serialize()[ATTRIBUTES]
+
         # kwargs.update(condition=condition)
-        # data = self._get_connection().put_item(*args, **kwargs)
-        # self.update_local_version_attribute()
+        table = self.resource().Table(self.Meta.table_name)
+        data = table.put_item(Item=items)
         return data
 
     def to_dict(self, primary_key: str = 'PK'):
@@ -703,7 +698,7 @@ class BatchWrite(ModelContextManager):
             if not self.auto_commit:
                 raise ValueError("DynamoDB allows a maximum of 25 batch operations")
             self.commit()
-        self.pending_operations.append({"action": DELETE, "item": del_item})
+        self.pending_operations.append({"Action": DELETE, "Item": del_item})
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         '''
@@ -719,12 +714,11 @@ class BatchWrite(ModelContextManager):
         logger.debug('%s committing batch operation', self.model)
         put_items = []
         delete_items = []
-        attrs_name = stringcase.camelcase(ATTRIBUTES)
         for item in self.pending_operations:
-            if item['action'] == PUT:
-                put_items.append(item['item']._serialize()[attrs_name])
-            elif item['action'] == DELETE:
-                delete_items.append(item['item']._get_keys())
+            if item['Action'] == PUT:
+                put_items.append(item['Item']._serialize()[ATTRIBUTES])
+            elif item['Action'] == DELETE:
+                delete_items.append(item['Item']._get_keys())
         self.pending_operations = []
         if not delete_items and not put_items:
             return
