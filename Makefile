@@ -1,4 +1,3 @@
-export DOCKER_BUILDKIT=1
 AWS_DEFAULT_REGION?=us-east-1
 
 build-test:

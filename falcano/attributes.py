@@ -31,6 +31,9 @@ from falcano.constants import (
     MAP, NUMBER, STRING_SET, LIST, NULL, MAP_SHORT, LIST_SHORT,
     NUMBER_SHORT, STRING_SHORT, ATTR_TYPE_MAP, STRING
 )
+from falcano.expressions.condition import (
+    NotExists
+)
 
 _T = TypeVar('_T')
 _KT = TypeVar('_KT', bound=str)
@@ -202,11 +205,12 @@ class Attribute(Generic[_T]):
     # def is_in(self, *values: Any) -> 'In':
     #     return Path(self).is_in(*values)
 
-    # def exists(self) -> 'Exists':
-    #     return Path(self).exists()
+    def exists(self) -> 'Exists':
+        return self.attr_fn()(self.attr_name).exists()
 
-    # def does_not_exist(self) -> 'NotExists':
-    #     return Path(self).does_not_exist()
+    def does_not_exist(self) -> 'NotExists':
+        print(self.attr_fn()(self.attr_name))
+        return self.attr_fn()(self.attr_name).does_not_exist()
 
     # def is_type(self):
     #     # What makes sense here? Are we using this to check if deserialization will be successful?

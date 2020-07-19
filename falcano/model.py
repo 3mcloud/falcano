@@ -212,7 +212,7 @@ class Model(metaclass=MetaModel):
 
         for attr_name, attr_value in attributes.items():
             if attr_name not in keys:
-                raise ValueError('Attribute {} specified does not exist'.format(attr_name))
+                raise ValueError(f'Attribute {attr_name} specified does not exist')
             setattr(self, attr_name, attr_value)
 
     @classmethod
@@ -410,14 +410,19 @@ class Model(metaclass=MetaModel):
                     raise error
 
     @classmethod
-    def scan(cls, **kwargs):
+    def scan(
+            cls,
+            **kwargs
+        ):
         '''
         Provides a high level scan API
         '''
-        table = cls.connection().describe_table(TableName=cls.Meta.table_name)
-        res = table.scan()
-        print(kwargs)
-        return iter([])
+        table = cls.resource().Table(cls.Meta.table_name)
+        response = table.scan(**kwargs)
+        return Results(
+            Model,
+            response
+        )
 
     @classmethod
     def exists(cls) -> bool:
@@ -612,11 +617,9 @@ class Model(metaclass=MetaModel):
 
     def save(self, condition: Optional[Condition] = None) -> Dict[str, Any]:
         ''' Save a falcano model into dynamodb '''
-        kwargs = {}
-        kwargs['Item'] = self._serialize()[ATTRIBUTES]
-        if condition: 
-            kwargs['Condition'] = condition
-
+        kwargs = {'Item': self._serialize()[ATTRIBUTES]}
+        if condition:
+            kwargs['ConditionExpression'] = condition
         table = self.resource().Table(self.Meta.table_name)
         data = table.put_item(**kwargs)
         return data

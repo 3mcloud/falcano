@@ -4,9 +4,9 @@ import botocore.exceptions
 
 
 class FalcanoException(Exception):
-    """
+    '''
     A common exception class
-    """
+    '''
     def __init__(self, msg: Optional[str] = None, cause: Optional[Exception] = None) -> None:
         self.msg = msg
         self.cause = cause
@@ -25,5 +25,5 @@ class TableDoesNotExist(FalcanoException):
     Raised when an operation is attempted on a table that doesn't exist
     '''
     def __init__(self, table_name: str) -> None:
-        msg = "Table does not exist: `{}`".format(table_name)
+        msg = f"Table does not exist: `{table_name}`"
         super(TableDoesNotExist, self).__init__(msg)
