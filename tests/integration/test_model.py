@@ -19,8 +19,8 @@ class BaseModel(Model):
     class Meta(Model.Meta):
         table_name = 'falcano-e2e'
         billing_mode = 'PAY_PER_REQUEST'
-    PK = UnicodeAttribute(hash_key=True)  # PK: team#id
-    SK = UnicodeAttribute(range_key=True)  # SK: team#name
+    PK = UnicodeAttribute(hash_key=True)
+    SK = UnicodeAttribute(range_key=True)
     TypeIndex = TypeIndex()
 
 
