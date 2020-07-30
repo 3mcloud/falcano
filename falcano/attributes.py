@@ -31,9 +31,6 @@ from falcano.constants import (
     MAP, NUMBER, STRING_SET, LIST, NULL, MAP_SHORT, LIST_SHORT,
     NUMBER_SHORT, STRING_SHORT, ATTR_TYPE_MAP, STRING
 )
-from falcano.expressions.condition import (
-    NotExists
-)
 
 _T = TypeVar('_T')
 _KT = TypeVar('_KT', bound=str)

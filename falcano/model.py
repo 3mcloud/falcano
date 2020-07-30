@@ -14,7 +14,6 @@ import stringcase
 import boto3
 import botocore
 from falcano.settings import get_settings_value
-from falcano.expressions.condition import Condition
 from falcano.indexes import Index, GlobalSecondaryIndex
 from falcano.paginator import Results
 from falcano.exceptions import TableDoesNotExist
@@ -609,13 +608,15 @@ class Model(metaclass=MetaModel):
         '''
         return BatchWrite(cls, auto_commit=auto_commit)
 
-    def delete(self, condition: Optional[Condition] =  None) -> Any:
+    def delete(self, condition=None) -> Any:
         kwargs = {}
         table = self.resource().Table(self.Meta.table_name)
+        if condition:
+            kwargs['ConditionExpression'] = condition
         kwargs['Key'] = self._get_keys()
         return table.delete_item(**kwargs)
 
-    def save(self, condition: Optional[Condition] = None) -> Dict[str, Any]:
+    def save(self, condition=None) -> Dict[str, Any]:
         ''' Save a falcano model into dynamodb '''
         kwargs = {'Item': self._serialize()[ATTRIBUTES]}
         if condition:
