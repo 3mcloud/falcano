@@ -1,12 +1,10 @@
 FROM python:slim as base
 RUN apt update && apt install make
 WORKDIR /work
-COPY requirements.txt requirements.txt
-COPY requirements-test.txt requirements-test.txt
 ENV AWS_DEFAULT_REGION=us-east-1
-
+COPY setup.py setup.py
 
 FROM base as test
-RUN pip install -r requirements-test.txt
+RUN pip install .[dev]
 COPY . .
 CMD ["python", "-m", "pytest", "-s", "tests/unit/"]
