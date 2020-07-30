@@ -688,7 +688,7 @@ class BatchWrite(ModelContextManager):
             if not self.auto_commit:
                 raise ValueError("DynamoDB allows a maximum of 25 batch operations")
             self.commit()
-        self.pending_operations.append({"action": PUT, "item": put_item})
+        self.pending_operations.append({"Action": PUT, "Item": put_item})
 
     def delete(self, del_item) -> None:
         '''
