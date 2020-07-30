@@ -426,9 +426,9 @@ class Model(metaclass=MetaModel):
 
     @classmethod
     def exists(cls) -> bool:
-        """
+        '''
         Returns True if this table exists, False otherwise
-        """
+        '''
         try:
             cls.connection().describe_table(TableName=cls.Meta.table_name)
             return True

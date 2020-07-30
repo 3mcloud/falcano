@@ -206,11 +206,10 @@ class Attribute(Generic[_T]):
     #     return Path(self).is_in(*values)
 
     def exists(self) -> 'Exists':
-        return self.attr_fn()(self.attr_name).exists()
+        return Attr(self.attr_name).exists()
 
     def does_not_exist(self) -> 'NotExists':
-        print(self.attr_fn()(self.attr_name))
-        return self.attr_fn()(self.attr_name).does_not_exist()
+        return Attr(self.attr_name).not_exists()
 
     # def is_type(self):
     #     # What makes sense here? Are we using this to check if deserialization will be successful?
