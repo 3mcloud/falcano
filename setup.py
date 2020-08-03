@@ -7,7 +7,7 @@ import subprocess
 from setuptools import setup, find_packages
 
 NAME = 'falcano'
-VERSION = '0.1'
+VERSION = '0.2'
 AUTHOR = 'Eric Walker'
 AUTHOR_EMAIL = 'ewalker3@mmm.com'
 DESCRIPTION = 'Falcano'
@@ -16,6 +16,7 @@ REQUIRES = [
     'bottle==0.12.18',
     'cache',
     'stringcase',
+    'boto3'
 ]
 REQUIRES_TEST = [
     'rsa>=4.3',
@@ -25,15 +26,12 @@ REQUIRES_TEST = [
     'pytest-cov>=2.8.1',
     'bandit>=1.6.2',
     'safety>=1.8.7',
-    'boto3',
     'paste',
     'ptvsd',
 ]
 
-REQUIRES_DOCS = [
-
-]
-LONG_DESCRIPTION = 'Single-table design Dynamo library'
+with open('README.md', 'r') as fh:
+    LONG_DESCRIPTION = fh.read()
 
 
 setup(
@@ -50,5 +48,11 @@ setup(
     extras_require={
         'dev': REQUIRES_TEST,
     },
-    include_package_data=True
+    include_package_data=True,
+    classifiers=[
+        "Programming Language :: Python :: 3",
+        "License :: OSI Approved :: BSD License",
+        "Operating System :: OS Independent",
+    ],
+    python_requires='>=3.6'
 )
