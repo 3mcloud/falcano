@@ -5,7 +5,7 @@ A Pythonic interface for Amazon's DynamoDB that supports Python 3 and [single-ta
 ## Installation
 
 ```bash
-pip install falcano@git+ssh://git@github.mmm.com/MMM/falcano
+pip install falcano@git+ssh://git@github.com/3mcloud/falcano
 ```
 
 ## Basic Usage
