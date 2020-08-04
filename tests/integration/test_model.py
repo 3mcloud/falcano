@@ -57,7 +57,7 @@ class TestModel(unittest.TestCase):
             # clean up all items in db
             item.delete()
 
-        self.friend1 = FriendModel('friend#drue', 'friend#meta', Name='Dan Rue', CreatedAt=datetime.utcnow())
+        self.friend1 = FriendModel('friend#drue', 'friend#meta', Name='Dan Rue', CreatedAt=datetime(2014, 5, 12, 23, 30))
         self.friend1.save()
         friend2 = FriendModel('friend#jberk', 'friend#meta', Name='Justin Berk')
         friend2.save()
@@ -73,7 +73,8 @@ class TestModel(unittest.TestCase):
             item.delete()
 
 
-    def test_model_integration(self):
+    def test_existence(self):
+        
         friend_group1 = FriendGroup(
             self.group1.PK,
             self.friend1.PK,
@@ -99,3 +100,6 @@ class TestModel(unittest.TestCase):
 
         for group in FriendGroup.query('group#group1', FriendGroup.SK.startswith('group#meta')):
             assert group.SK == 'group#meta'
+
+    def test_time_storage(self):
+        assert self.friend1.CreatedAt == datetime(2014, 5, 12, 23, 30)

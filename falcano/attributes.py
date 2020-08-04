@@ -489,33 +489,29 @@ class UTCDateTimeAttribute(Attribute[datetime]):
     '''
     attr_type = STRING
     
-    def __get__(self: _A, instance: Any, owner: Any) -> Union[_A, _T]:
+    def serialize(self, value):
+        '''
+        Takes a datetime object and returns a string
+        '''
+        if value.tzinfo is None:
+            value = value.replace(tzinfo=tzutc())
+        fmt = value.astimezone(tzutc()).strftime(DATETIME_FORMAT)
+        return fmt
 
-        return self.strftime(DATETIME_FORMAT)
-
-    # def serialize(self, value):
-    #     '''
-    #     Takes a datetime object and returns a string
-    #     '''
-    #     if value.tzinfo is None:
-    #         value = value.replace(tzinfo=tzutc())
-    #     fmt = value.astimezone(tzutc()).strftime(DATETIME_FORMAT)
-    #     return fmt
-
-    # def deserialize(self, value):
-    #     '''
-    #     Takes a UTC datetime string and returns a datetime object
-    #     '''
-    #     try:
-    #         return _fast_parse_utc_datestring(value)
-    #     except (ValueError, IndexError):
-    #         try:
-    #             # Attempt to parse the datetime with the datetime format used
-    #             # by default when storing UTCDateTimeAttributes.  This is significantly
-    #             # faster than always going through dateutil.
-    #             return datetime.strptime(value, DATETIME_FORMAT)
-    #         except ValueError:
-    #             return parse(value)
+    def deserialize(self, value):
+        '''
+        Takes a UTC datetime string and returns a datetime object
+        '''
+        try:
+            return _fast_parse_utc_datestring(value)
+        except (ValueError, IndexError):
+            try:
+                # Attempt to parse the datetime with the datetime format used
+                # by default when storing UTCDateTimeAttributes.  This is significantly
+                # faster than always going through dateutil.
+                return datetime.strptime(value, DATETIME_FORMAT)
+            except ValueError:
+                return parse(value)
 
 class NullAttribute(Attribute[None]):
     '''

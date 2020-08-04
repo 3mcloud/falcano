@@ -515,10 +515,10 @@ class Model(metaclass=MetaModel):
             if isinstance(value, MapAttribute):
                 if not value.validate():
                     raise ValueError("Attribute '{}' is not correctly typed".format(attr.attr_name))
-
+            
             if value is None:
                 continue
-            serialized = value
+            serialized = attr.serialize(value)
             if serialized is None and not attr.null and null_check:
                 raise ValueError(f"Attribute '{attr.attr_name}' cannot be None")
 
