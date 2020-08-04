@@ -57,7 +57,7 @@ class TestModel(unittest.TestCase):
             # clean up all items in db
             item.delete()
 
-        self.friend1 = FriendModel('friend#drue', 'friend#meta', Name='Dan Rue')
+        self.friend1 = FriendModel('friend#drue', 'friend#meta', Name='Dan Rue', CreatedAt=datetime.utcnow())
         self.friend1.save()
         friend2 = FriendModel('friend#jberk', 'friend#meta', Name='Justin Berk')
         friend2.save()
