@@ -6,6 +6,7 @@ from copy import deepcopy
 import calendar
 import time
 from datetime import datetime, timedelta
+from dateutil.parser import parse
 from inspect import getmembers, getfullargspec
 import json
 from typing import (
@@ -29,7 +30,7 @@ from boto3.dynamodb.conditions import (
 )
 from falcano.constants import (
     MAP, NUMBER, STRING_SET, LIST, NULL, MAP_SHORT, LIST_SHORT,
-    NUMBER_SHORT, STRING_SHORT, ATTR_TYPE_MAP, STRING
+    NUMBER_SHORT, STRING_SHORT, ATTR_TYPE_MAP, STRING, DATETIME_FORMAT
 )
 
 _T = TypeVar('_T')
@@ -482,6 +483,35 @@ class TTLAttribute(Attribute[datetime]):
         timestamp = json.loads(value)
         return datetime.utcfromtimestamp(timestamp).replace(tzinfo=tzutc())
 
+class UTCDateTimeAttribute(Attribute[datetime]):
+    """
+    An attribute for storing a UTC Datetime
+    """
+    attr_type = STRING
+
+    def serialize(self, value):
+        """
+        Takes a datetime object and returns a string
+        """
+        if value.tzinfo is None:
+            value = value.replace(tzinfo=tzutc())
+        fmt = value.astimezone(tzutc()).strftime(DATETIME_FORMAT)
+        return fmt
+
+    def deserialize(self, value):
+        """
+        Takes a UTC datetime string and returns a datetime object
+        """
+        try:
+            return _fast_parse_utc_datestring(value)
+        except (ValueError, IndexError):
+            try:
+                # Attempt to parse the datetime with the datetime format used
+                # by default when storing UTCDateTimeAttributes.  This is significantly
+                # faster than always going through dateutil.
+                return datetime.strptime(value, DATETIME_FORMAT)
+            except ValueError:
+                return parse(value)
 
 class NullAttribute(Attribute[None]):
     '''
@@ -890,11 +920,31 @@ class ListAttribute(Attribute[List[_T]]):
         '''
         deserialized_lst = []
         for val in values:
-            class_for_deserialize = self.element_type() if self.element_type else _get_class_for_deserialize(val)
+            class_for_deserialize = self.element_type() \
+                if self.element_type else _get_class_for_deserialize(val)
             attr_value = _get_value_for_deserialize(val)
             deserialized_lst.append(class_for_deserialize.deserialize(attr_value))
         return deserialized_lst
 
+
+def _fast_parse_utc_datestring(datestring):
+    # Method to quickly parse strings formatted with '%Y-%m-%dT%H:%M:%S.%f+0000'.
+    # This is ~5.8x faster than using strptime and 38x faster than dateutil.parser.parse.
+    _int = int  # Hack to prevent global lookups of int, speeds up the function ~10%
+    try:
+        if (datestring[4] != '-' or datestring[7] != '-' or datestring[10] != 'T' or #pylint: disable=R0916
+                datestring[13] != ':' or datestring[16] != ':' or datestring[19] != '.' or
+                datestring[-5:] != '+0000'):
+            raise ValueError("Datetime string '{}' does not match format "
+                             "'%Y-%m-%dT%H:%M:%S.%f+0000'".format(datestring))
+        return datetime(
+            _int(datestring[0:4]), _int(datestring[5:7]), _int(datestring[8:10]),
+            _int(datestring[11:13]), _int(datestring[14:16]), _int(datestring[17:19]),
+            _int(round(float(datestring[19:-5]) * 1e6)), tzutc()
+        )
+    except (TypeError, ValueError):
+        raise ValueError("Datetime string '{}' does not match format "
+                         "'%Y-%m-%dT%H:%M:%S.%f+0000'".format(datestring))
 
 DESERIALIZE_CLASS_MAP: Dict[str, Attribute] = {
     LIST_SHORT: ListAttribute(),

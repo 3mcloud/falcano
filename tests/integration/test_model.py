@@ -4,7 +4,7 @@ from botocore.exceptions import ClientError
 import pytest
 from _pytest.monkeypatch import MonkeyPatch
 from falcano.model import Model
-from falcano.attributes import UnicodeAttribute
+from falcano.attributes import UnicodeAttribute, UTCDateTimeAttribute
 from falcano.indexes import GlobalSecondaryIndex, AllProjection
 
 
@@ -33,6 +33,7 @@ class FriendModel(BaseModel):
     Type = UnicodeAttribute(default='friend')
     Name = UnicodeAttribute()
     Description = UnicodeAttribute(null=True)
+    CreatedAt = UTCDateTimeAttribute(default=datetime.utcnow())
 
 class FriendGroup(BaseModel):
     '''
@@ -51,7 +52,7 @@ class TestModel(unittest.TestCase):
         if not BaseModel.exists():
             print('Creating table')
             FriendModel.create_table(wait=True)
-        
+
         for item in BaseModel.scan():
             # clean up all items in db
             item.delete()
@@ -74,20 +75,20 @@ class TestModel(unittest.TestCase):
 
     def test_model_integration(self):
         friend_group1 = FriendGroup(
-            self.group1.PK, 
+            self.group1.PK,
             self.friend1.PK,
-            Name="Boston"    
+            Name="Boston"
         )
         friend_group1.save(FriendGroup.SK.does_not_exist())
         with pytest.raises(ClientError) as err:
             friend_group1.save(FriendGroup.SK.does_not_exist())
         assert err.typename == 'ConditionalCheckFailedException'
-        
+
         friend_group1.Name = 'Seattle'
         res = friend_group1.save(FriendGroup.SK.exists())
 
         res = FriendGroup.query(
-            self.group1.PK, 
+            self.group1.PK,
             FriendGroup.SK.startswith(
                 self.friend1.PK
             )
@@ -98,4 +99,3 @@ class TestModel(unittest.TestCase):
 
         for group in FriendGroup.query('group#group1', FriendGroup.SK.startswith('group#meta')):
             assert group.SK == 'group#meta'
-
