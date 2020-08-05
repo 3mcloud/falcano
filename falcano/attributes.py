@@ -32,6 +32,7 @@ from falcano.constants import (
     MAP, NUMBER, STRING_SET, LIST, NULL, MAP_SHORT, LIST_SHORT,
     NUMBER_SHORT, STRING_SHORT, ATTR_TYPE_MAP, STRING, DATETIME_FORMAT
 )
+from falcano.expressions.operand import Path
 
 _T = TypeVar('_T')
 _KT = TypeVar('_KT', bound=str)
@@ -215,44 +216,45 @@ class Attribute(Generic[_T]):
 
     def startswith(self, prefix: str) -> 'BeginsWith':
         '''Return a condition that this attribute starts with the prefix'''
+        # TODO: handle `Key` vs `Attr` for Condition Expression
         return self.attr_fn()(self.attr_name).begins_with(prefix)
 
     # def contains(self, item: Any) -> 'Contains':
     #     return Path(self).contains(item)
 
     # # Update Expression Support
-    # def __add__(self, other: Any) -> '_Increment':
-    #     return Path(self).__add__(other)
+    def __add__(self, other: Any) -> 'Increment':
+        return Path(self).__add__(other)
 
-    # def __radd__(self, other: Any) -> '_Increment':
-    #     return Path(self).__radd__(other)
+    def __radd__(self, other: Any) -> 'Increment':
+        return Path(self).__radd__(other)
 
-    # def __sub__(self, other: Any) -> '_Decrement':
-    #     return Path(self).__sub__(other)
+    def __sub__(self, other: Any) -> 'Decrement':
+        return Path(self).__sub__(other)
 
-    # def __rsub__(self, other: Any) -> '_Decrement':
-    #     return Path(self).__rsub__(other)
+    def __rsub__(self, other: Any) -> 'Decrement':
+        return Path(self).__rsub__(other)
 
-    # def __or__(self, other: Any) -> '_IfNotExists':
-    #     return Path(self).__or__(other)
+    def __or__(self, other: Any) -> 'IfNotExists':
+        return Path(self).__or__(other)
 
-    # def append(self, other: Any) -> '_ListAppend':
-    #     return Path(self).append(other)
+    def append(self, other: Any) -> 'ListAppend':
+        return Path(self).append(other)
 
-    # def prepend(self, other: Any) -> '_ListAppend':
-    #     return Path(self).prepend(other)
+    def prepend(self, other: Any) -> 'ListAppend':
+        return Path(self).prepend(other)
 
-    # def set(self, value: Any) -> 'SetAction':
-    #     return Path(self).set(value)
+    def set(self, value: Any) -> 'SetAction':
+        return Path(self).set(value)
 
-    # def remove(self) -> 'RemoveAction':
-    #     return Path(self).remove()
+    def remove(self) -> 'RemoveAction':
+        return Path(self).remove()
 
-    # def add(self, *values: Any) -> 'AddAction':
-    #     return Path(self).add(*values)
+    def add(self, *values: Any) -> 'AddAction':
+        return Path(self).add(*values)
 
-    # def delete(self, *values: Any) -> 'DeleteAction':
-    #     return Path(self).delete(*values)
+    def delete(self, *values: Any) -> 'DeleteAction':
+        return Path(self).delete(*values)
 
 
 class AttributeContainer(metaclass=AttributeContainerMeta):
@@ -409,7 +411,7 @@ class UnicodeSetAttribute(SetMixin, Attribute[Set[Text]]):
             except TypeError:
                 value = [value]
             if value:
-                return [self.element_serialize(val) for val in sorted(value)]
+                return set(self.element_serialize(val) for val in sorted(value))
         return None
 
     def deserialize(self, value):
@@ -428,7 +430,7 @@ class NumberAttribute(Attribute[float]):
         '''
         Encode numbers as JSON
         '''
-        return json.dumps(value)
+        return value
 
     def deserialize(self, value):
         '''
@@ -483,12 +485,13 @@ class TTLAttribute(Attribute[datetime]):
         timestamp = json.loads(value)
         return datetime.utcfromtimestamp(timestamp).replace(tzinfo=tzutc())
 
+
 class UTCDateTimeAttribute(Attribute[datetime]):
     '''
     An attribute for storing a UTC Datetime
     '''
     attr_type = STRING
-    
+
     def serialize(self, value):
         '''
         Takes a datetime object and returns a string
@@ -512,6 +515,7 @@ class UTCDateTimeAttribute(Attribute[datetime]):
                 return datetime.strptime(value, DATETIME_FORMAT)
             except ValueError:
                 return parse(value)
+
 
 class NullAttribute(Attribute[None]):
     '''
@@ -911,7 +915,7 @@ class ListAttribute(Attribute[List[_T]]):
                 attr_key = ATTR_TYPE_MAP[attr_class.attr_type]
             else:
                 attr_key = _get_key_for_serialize(val)
-            rval.append({attr_key: attr_class.serialize(val)})
+            rval.append(attr_class.serialize(val))
         return rval
 
     def deserialize(self, values):  # pylint: disable=arguments-differ
@@ -932,7 +936,7 @@ def _fast_parse_utc_datestring(datestring):
     # This is ~5.8x faster than using strptime and 38x faster than dateutil.parser.parse.
     _int = int  # Hack to prevent global lookups of int, speeds up the function ~10%
     try:
-        if (datestring[4] != '-' or datestring[7] != '-' or datestring[10] != 'T' or #pylint: disable=R0916
+        if (datestring[4] != '-' or datestring[7] != '-' or datestring[10] != 'T' or  # pylint: disable=R0916
                 datestring[13] != ':' or datestring[16] != ':' or datestring[19] != '.' or
                 datestring[-5:] != '+0000'):
             raise ValueError("Datetime string '{}' does not match format "
@@ -946,6 +950,7 @@ def _fast_parse_utc_datestring(datestring):
         raise ValueError("Datetime string '{}' does not match format "
                          "'%Y-%m-%dT%H:%M:%S.%f+0000'".format(datestring))
 
+
 DESERIALIZE_CLASS_MAP: Dict[str, Attribute] = {
     LIST_SHORT: ListAttribute(),
     NUMBER_SHORT: NumberAttribute(),
@@ -953,6 +958,8 @@ DESERIALIZE_CLASS_MAP: Dict[str, Attribute] = {
     # BOOLEAN: BooleanAttribute(),
     MAP_SHORT: MapAttribute(),
     NULL: NullAttribute()
+
+
 }
 
 SERIALIZE_CLASS_MAP = {
