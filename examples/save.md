@@ -1,6 +1,6 @@
 # Falcano DB Save
 
-Falcano allows saving! Duh.
+Falcano allows saving!
 
 Let's start with a base model, then we can extend it to make other models.
 
