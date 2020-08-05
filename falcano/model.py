@@ -21,7 +21,8 @@ from falcano.attributes import (
     Attribute,
     AttributeContainerMeta,
     MapAttribute,
-    TTLAttribute
+    TTLAttribute,
+    UTCDateTimeAttribute
 )
 
 from falcano.constants import (
@@ -514,10 +515,10 @@ class Model(metaclass=MetaModel):
             if isinstance(value, MapAttribute):
                 if not value.validate():
                     raise ValueError("Attribute '{}' is not correctly typed".format(attr.attr_name))
-
+            
             if value is None:
                 continue
-            serialized = value
+            serialized = attr.serialize(value)
             if serialized is None and not attr.null and null_check:
                 raise ValueError(f"Attribute '{attr.attr_name}' cannot be None")
 
@@ -553,7 +554,7 @@ class Model(metaclass=MetaModel):
             serialized = None
         else:
             serialized = attr.serialize(value)
-        return {ATTR_TYPE_MAP[attr.attr_type]: serialized}
+        return serialized
 
     @classmethod
     def _serialize_keys(cls, hash_key, range_key=None) -> Tuple[_KeyType, _KeyType]:

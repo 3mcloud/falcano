@@ -4,7 +4,7 @@ from botocore.exceptions import ClientError
 import pytest
 from _pytest.monkeypatch import MonkeyPatch
 from falcano.model import Model
-from falcano.attributes import UnicodeAttribute
+from falcano.attributes import UnicodeAttribute, UTCDateTimeAttribute
 from falcano.indexes import GlobalSecondaryIndex, AllProjection
 
 
@@ -33,6 +33,7 @@ class FriendModel(BaseModel):
     Type = UnicodeAttribute(default='friend')
     Name = UnicodeAttribute()
     Description = UnicodeAttribute(null=True)
+    CreatedAt = UTCDateTimeAttribute(default=datetime.utcnow())
 
 class FriendGroup(BaseModel):
     '''
@@ -51,12 +52,12 @@ class TestModel(unittest.TestCase):
         if not BaseModel.exists():
             print('Creating table')
             FriendModel.create_table(wait=True)
-        
+
         for item in BaseModel.scan():
             # clean up all items in db
             item.delete()
 
-        self.friend1 = FriendModel('friend#drue', 'friend#meta', Name='Dan Rue')
+        self.friend1 = FriendModel('friend#drue', 'friend#meta', Name='Dan Rue', CreatedAt=datetime(2014, 5, 12, 23, 30))
         self.friend1.save()
         friend2 = FriendModel('friend#jberk', 'friend#meta', Name='Justin Berk')
         friend2.save()
@@ -72,22 +73,23 @@ class TestModel(unittest.TestCase):
             item.delete()
 
 
-    def test_model_integration(self):
+    def test_existence(self):
+        
         friend_group1 = FriendGroup(
-            self.group1.PK, 
+            self.group1.PK,
             self.friend1.PK,
-            Name="Boston"    
+            Name="Boston"
         )
         friend_group1.save(FriendGroup.SK.does_not_exist())
         with pytest.raises(ClientError) as err:
             friend_group1.save(FriendGroup.SK.does_not_exist())
         assert err.typename == 'ConditionalCheckFailedException'
-        
+
         friend_group1.Name = 'Seattle'
         res = friend_group1.save(FriendGroup.SK.exists())
 
         res = FriendGroup.query(
-            self.group1.PK, 
+            self.group1.PK,
             FriendGroup.SK.startswith(
                 self.friend1.PK
             )
@@ -99,3 +101,5 @@ class TestModel(unittest.TestCase):
         for group in FriendGroup.query('group#group1', FriendGroup.SK.startswith('group#meta')):
             assert group.SK == 'group#meta'
 
+    def test_time_storage(self):
+        assert self.friend1.CreatedAt == datetime(2014, 5, 12, 23, 30)
