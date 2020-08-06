@@ -1,5 +1,5 @@
 '''
-Pynamodb constants
+falcano constants
 '''
 # pylint: disable-line-too-long
 

@@ -24,13 +24,15 @@ from falcano.attributes import (
     TTLAttribute,
     UTCDateTimeAttribute
 )
+from falcano.expressions.update import Update
 
 from falcano.constants import (
     BATCH_WRITE_PAGE_LIMIT, DELETE, PUT, ATTR_TYPE_MAP, ATTR_NAME, ATTR_TYPE, RANGE, HASH,
     BILLING_MODE, GLOBAL_SECONDARY_INDEXES, LOCAL_SECONDARY_INDEXES, READ_CAPACITY_UNITS,
     WRITE_CAPACITY_UNITS, PROJECTION, INDEX_NAME, PROJECTION_TYPE, PAY_PER_REQUEST_BILLING_MODE,
     ATTRIBUTES, META_CLASS_NAME, REGION, HOST, ATTR_DEFINITIONS, KEY_SCHEMA, KEY_TYPE, TABLE_NAME,
-    PROVISIONED_THROUGHPUT, NON_KEY_ATTRIBUTES, RANGE_KEY
+    PROVISIONED_THROUGHPUT, NON_KEY_ATTRIBUTES, RANGE_KEY, CONDITION_EXPRESSION, UPDATE_EXPRESSION,
+    EXPRESSION_ATTRIBUTE_NAMES, EXPRESSION_ATTRIBUTE_VALUES, RETURN_VALUES, ALL_NEW, KEY
 )
 
 logger = logging.getLogger('entity-base')  # pylint: disable=invalid-name
@@ -411,9 +413,9 @@ class Model(metaclass=MetaModel):
 
     @classmethod
     def scan(
-            cls,
-            **kwargs
-        ):
+        cls,
+        **kwargs
+    ):
         '''
         Provides a high level scan API
         '''
@@ -515,7 +517,7 @@ class Model(metaclass=MetaModel):
             if isinstance(value, MapAttribute):
                 if not value.validate():
                     raise ValueError("Attribute '{}' is not correctly typed".format(attr.attr_name))
-            
+
             if value is None:
                 continue
             serialized = attr.serialize(value)
@@ -616,6 +618,38 @@ class Model(metaclass=MetaModel):
             kwargs['ConditionExpression'] = condition
         kwargs['Key'] = self._get_keys()
         return table.delete_item(**kwargs)
+
+    def update(self, actions, condition=None):
+        '''
+        Updates an item using the UpdateItem operation.
+        '''
+        if not isinstance(actions, list) or len(actions) == 0:
+            raise TypeError('the value of `actions` is expected to be a non-empty list')
+
+        kwargs = {
+            RETURN_VALUES: ALL_NEW,
+        }
+        if condition is not None:
+            kwargs[CONDITION_EXPRESSION] = condition
+
+        name_placeholders: Dict[str, str] = {}
+        expression_attribute_values: Dict[str, Any] = {}
+        if actions is not None:
+            update_expression = Update(*actions)
+            kwargs[UPDATE_EXPRESSION] = update_expression.serialize(
+                name_placeholders,
+                expression_attribute_values
+            )
+        if name_placeholders:
+            kwargs[EXPRESSION_ATTRIBUTE_NAMES] = {v: k for k, v in name_placeholders.items()}
+        if expression_attribute_values:
+            kwargs[EXPRESSION_ATTRIBUTE_VALUES] = expression_attribute_values
+
+        # Get the key and put it in kwargs
+        kwargs[KEY] = self._get_keys()
+        table = self.resource().Table(self.Meta.table_name)
+        data = table.update_item(**kwargs)
+        return data
 
     def save(self, condition=None) -> Dict[str, Any]:
         ''' Save a falcano model into dynamodb '''
