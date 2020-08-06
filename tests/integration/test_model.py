@@ -86,10 +86,10 @@ class TestModel(unittest.TestCase):
         self.group1 = FriendGroup('group#group1', 'group#meta', Name='Friendship Squad')
         self.group1.save()
 
-        self.update = FriendToUpdate(
+        self.friend_to_update = FriendToUpdate(
             'update#first', 'update#meta', NumberAttr=2,
             SetAttr={'A', 'B'}, ListAttr=['One', 'Two'], StringAttr='First')
-        self.update.save()
+        self.friend_to_update.save()
 
     def tearDown(self):
         # clean up all items in db
@@ -136,13 +136,13 @@ class TestModel(unittest.TestCase):
             'SetAttr': {'Alphabet', 'B', 'A'},
             'Type': 'update_friend'}
         }
-        self.update.update(actions=[
+        self.friend_to_update.update(actions=[
             FriendToUpdate.NumberAttr.set(FriendToUpdate.NumberAttr - 5),
             FriendToUpdate.SetAttr.add({'Alphabet'}),
             FriendToUpdate.StringAttr.remove(),
             FriendToUpdate.ListAttr.set(FriendToUpdate.ListAttr.append(['three', 'four']))
         ])
         res = list(BaseModel.query(
-            self.update.PK,
+            self.friend_to_update.PK,
             FriendToUpdate.SK.eq('update#meta')))[0]._serialize()
         assert res == expected
