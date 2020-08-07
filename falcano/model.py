@@ -670,12 +670,12 @@ class Model(metaclass=MetaModel):
 
     def _attr2obj(self, attr):
         '''Turn a pynamo Attribute into a dict'''
-        if isinstance(attr, (list)):
+        if isinstance(attr, list):
             _list = []
             for item in attr:
                 _list.append(self._attr2obj(item))
             return _list
-        if isinstance(attr, (set)):
+        if isinstance(attr, set):
             _set = set()
             for item in attr:
                 _set.add(self._attr2obj(item))
