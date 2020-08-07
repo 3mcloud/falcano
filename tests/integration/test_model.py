@@ -1,5 +1,6 @@
 import unittest
 from datetime import datetime
+from decimal import Decimal
 from botocore.exceptions import ClientError
 import pytest
 from _pytest.monkeypatch import MonkeyPatch
@@ -128,12 +129,13 @@ class TestModel(unittest.TestCase):
         assert self.friend1.CreatedAt == datetime(2014, 5, 12, 23, 30)
 
     def test_update(self):
-        expected = {'Attributes': {
+        expected = {'update': {
+            'ID': 'first',
             'ListAttr': ['One', 'Two', 'three', 'four'],
-            'NumberAttr': -3,
+            'NumberAttr': Decimal('-3'),
             'PK': 'update#first',
             'SK': 'update#meta',
-            'SetAttr': {'Alphabet', 'B', 'A'},
+            'SetAttr': {'Alphabet', 'A', 'B'},
             'Type': 'update_friend'}
         }
         self.friend_to_update.update(actions=[
@@ -142,7 +144,8 @@ class TestModel(unittest.TestCase):
             FriendToUpdate.StringAttr.remove(),
             FriendToUpdate.ListAttr.set(FriendToUpdate.ListAttr.append(['three', 'four']))
         ])
-        res = list(BaseModel.query(
+        records = BaseModel.query(
             self.friend_to_update.PK,
-            FriendToUpdate.SK.eq('update#meta')))[0]._serialize()
-        assert res == expected
+            FriendToUpdate.SK.eq('update#meta'))
+        got = records.collection(output={})
+        assert expected == got
