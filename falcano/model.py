@@ -427,6 +427,27 @@ class Model(metaclass=MetaModel):
         )
 
     @classmethod
+    def get(
+        cls,
+        hash_key,
+        range_key=None,
+        **kwargs
+    ):
+        '''
+        Provides a high level get_item API
+        '''
+        table = cls.resource().Table(cls.Meta.table_name)
+        args = kwargs
+        args['Key'] = {cls.get_hash_key().attr_name: hash_key}
+        if range_key is not None:
+            args['Key'][cls.get_range_key().attr_name] = range_key
+        response = table.get_item(**kwargs)
+        return Results(
+            Model,
+            response
+        )
+
+    @classmethod
     def exists(cls) -> bool:
         '''
         Returns True if this table exists, False otherwise
