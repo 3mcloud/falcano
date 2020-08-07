@@ -648,8 +648,8 @@ class Model(metaclass=MetaModel):
         # Get the key and put it in kwargs
         kwargs[KEY] = self._get_keys()
         table = self.resource().Table(self.Meta.table_name)
-        data = table.update_item(**kwargs)
-        return data
+        res = table.update_item(**kwargs)
+        return Results(Model, res)
 
     def save(self, condition=None) -> Dict[str, Any]:
         ''' Save a falcano model into dynamodb '''
@@ -670,11 +670,16 @@ class Model(metaclass=MetaModel):
 
     def _attr2obj(self, attr):
         '''Turn a pynamo Attribute into a dict'''
-        if isinstance(attr, (list, set)):
+        if isinstance(attr, list):
             _list = []
             for item in attr:
                 _list.append(self._attr2obj(item))
             return _list
+        if isinstance(attr, set):
+            _set = set()
+            for item in attr:
+                _set.add(self._attr2obj(item))
+            return _set
         if isinstance(attr, MapAttribute):
             _dict = {}
             for key, value in attr.attribute_values.items():

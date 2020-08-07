@@ -17,7 +17,10 @@ class Results:
         self.__index: int = 0
         self.model = model
         self.response = query_response
-        self.to_models(query_response['Items'])
+        if 'Attributes' in query_response:
+            self.to_models([query_response['Attributes']])
+        else:
+            self.to_models(query_response['Items'])
 
     def __iter__(self):
         return self
