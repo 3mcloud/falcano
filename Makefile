@@ -13,6 +13,9 @@ unit: build-test
 	-v ${PWD}:/work \
 	falcano:test
 
+integration:
+	python -m pytest -s tests/integration
+
 e2e:
 	python -m pytest -s tests/e2e
 
