@@ -128,6 +128,25 @@ class TestModel(unittest.TestCase):
     def test_time_storage(self):
         assert self.friend1.CreatedAt == datetime(2014, 5, 12, 23, 30)
 
+    def test_get(self):
+        res = BaseModel.get(self.friend1.PK, self.friend1.SK)
+        assert res.PK == self.friend1.PK
+        assert res.SK == self.friend1.SK
+
+    def test_batch_get(self):
+        items = [{
+            'PK': self.friend1.PK,
+            'SK': self.friend1.SK
+        }, {
+            'PK': self.group1.PK,
+            'SK': self.group1.SK
+        }]
+        records = BaseModel.batch_get(items).records
+        assert records[0].PK == self.friend1.PK
+        assert records[0].SK == self.friend1.SK
+        assert records[1].PK == self.group1.PK
+        assert records[1].SK == self.group1.SK
+
     def test_update(self):
         expected = {'update': {
             'ID': 'first',

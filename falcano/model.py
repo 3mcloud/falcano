@@ -441,10 +441,29 @@ class Model(metaclass=MetaModel):
         args['Key'] = {cls.get_hash_key().attr_name: hash_key}
         if range_key is not None:
             args['Key'][cls.get_range_key().attr_name] = range_key
-        response = table.get_item(**kwargs)
+        res = table.get_item(**args)['Item']
+        return Model._models[res['Type']](**res)
+
+    @classmethod
+    def batch_get(
+        cls,
+        items,
+        **kwargs
+    ):
+        '''
+        Provides a high level batch_get_item API
+
+        :param items: contains a list of dicts of primary/sort key-value pairs
+        '''
+        resource = cls.resource()
+        table_name = cls.Meta.table_name
+        args = kwargs
+        args['Keys'] = items
+        args = {'RequestItems': {cls.Meta.table_name: args}}
+        response = resource.batch_get_item(**args)
         return Results(
             Model,
-            response
+            {'Items': response['Responses'][cls.Meta.table_name]}
         )
 
     @classmethod
@@ -669,8 +688,8 @@ class Model(metaclass=MetaModel):
         # Get the key and put it in kwargs
         kwargs[KEY] = self._get_keys()
         table = self.resource().Table(self.Meta.table_name)
-        res = table.update_item(**kwargs)
-        return Results(Model, res)
+        res = table.update_item(**kwargs)['Attributes']
+        return Model._models[res['Type']](**res)
 
     def save(self, condition=None) -> Dict[str, Any]:
         ''' Save a falcano model into dynamodb '''
