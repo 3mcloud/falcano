@@ -16,7 +16,7 @@ import botocore
 from falcano.settings import get_settings_value
 from falcano.indexes import Index, GlobalSecondaryIndex
 from falcano.paginator import Results
-from falcano.exceptions import TableDoesNotExist
+from falcano.exceptions import TableDoesNotExist, DoesNotExist
 from falcano.attributes import (
     Attribute,
     AttributeContainerMeta,
@@ -27,12 +27,13 @@ from falcano.attributes import (
 from falcano.expressions.update import Update
 
 from falcano.constants import (
-    BATCH_WRITE_PAGE_LIMIT, DELETE, PUT, ATTR_TYPE_MAP, ATTR_NAME, ATTR_TYPE, RANGE, HASH,
-    BILLING_MODE, GLOBAL_SECONDARY_INDEXES, LOCAL_SECONDARY_INDEXES, READ_CAPACITY_UNITS,
+    BATCH_WRITE_PAGE_LIMIT, DELETE, PUT, ATTR_TYPE_MAP, ATTR_NAME, ATTR_TYPE, RANGE, HASH, ITEMS,
+    BILLING_MODE, GLOBAL_SECONDARY_INDEXES, LOCAL_SECONDARY_INDEXES, READ_CAPACITY_UNITS, ITEM,
     WRITE_CAPACITY_UNITS, PROJECTION, INDEX_NAME, PROJECTION_TYPE, PAY_PER_REQUEST_BILLING_MODE,
     ATTRIBUTES, META_CLASS_NAME, REGION, HOST, ATTR_DEFINITIONS, KEY_SCHEMA, KEY_TYPE, TABLE_NAME,
     PROVISIONED_THROUGHPUT, NON_KEY_ATTRIBUTES, RANGE_KEY, CONDITION_EXPRESSION, UPDATE_EXPRESSION,
-    EXPRESSION_ATTRIBUTE_NAMES, EXPRESSION_ATTRIBUTE_VALUES, RETURN_VALUES, ALL_NEW, KEY
+    EXPRESSION_ATTRIBUTE_NAMES, EXPRESSION_ATTRIBUTE_VALUES, RETURN_VALUES, ALL_NEW, KEY,
+    RESPONSES, BATCH_GET_PAGE_LIMIT, UNPROCESSED_KEYS, KEYS
 )
 
 logger = logging.getLogger('entity-base')  # pylint: disable=invalid-name
@@ -166,6 +167,7 @@ class Model(metaclass=MetaModel):
         _table = None
         separator = '#'
         model_type = 'Type'
+
         @property
         def table(self):
             '''
@@ -437,12 +439,13 @@ class Model(metaclass=MetaModel):
         Provides a high level get_item API
         '''
         table = cls.resource().Table(cls.Meta.table_name)
-        args = kwargs
-        args['Key'] = {cls.get_hash_key().attr_name: hash_key}
+        kwargs['Key'] = {cls.get_hash_key().attr_name: hash_key}
         if range_key is not None:
-            args['Key'][cls.get_range_key().attr_name] = range_key
-        res = table.get_item(**args)['Item']
-        return Model._models[res['Type']](**res)
+            kwargs['Key'][cls.get_range_key().attr_name] = range_key
+        res = table.get_item(**kwargs)
+        if res and (data := res.get(ITEM)):
+            return Model._models[data[cls.Meta.model_type]](**data)
+        raise DoesNotExist()
 
     @classmethod
     def batch_get(
@@ -455,16 +458,61 @@ class Model(metaclass=MetaModel):
 
         :param items: contains a list of dicts of primary/sort key-value pairs
         '''
-        resource = cls.resource()
-        table_name = cls.Meta.table_name
-        args = kwargs
-        args['Keys'] = items
-        args = {'RequestItems': {cls.Meta.table_name: args}}
-        response = resource.batch_get_item(**args)
+        hash_key_attribute = cls.get_hash_key()
+        range_key_attribute = cls.get_range_key()
+        keys_to_get: List[Any] = []
+        records = []
+        while items:
+            item = items.pop()
+            if range_key_attribute:
+                hash_key, range_key = cls._serialize_keys(item[0], item[1])  # type: ignore
+                keys_to_get.append({
+                    hash_key_attribute.attr_name: hash_key,
+                    range_key_attribute.attr_name: range_key
+                })
+            else:
+                hash_key = cls._serialize_keys(item)[0]
+                keys_to_get.append({
+                    hash_key_attribute.attr_name: hash_key
+                })
+
+            if len(keys_to_get) == BATCH_GET_PAGE_LIMIT or not items:
+                while keys_to_get:
+                    page, unprocessed_keys = cls._batch_get_page(
+                        keys_to_get,
+                        **kwargs
+                    )
+                    records += page
+                    if unprocessed_keys:
+                        keys_to_get = unprocessed_keys
+                    else:
+                        keys_to_get = []
+
         return Results(
             Model,
-            {'Items': response['Responses'][cls.Meta.table_name]}
+            {'Items': records}
         )
+
+    @classmethod
+    def _batch_get_page(cls, keys_to_get, **kwargs):
+        '''
+        Returns a single page from BatchGetItem
+        Also returns any unprocessed items
+
+        :param keys_to_get: A list of keys
+        '''
+        logger.debug('Fetching a BatchGetItem page')
+
+        resource = cls.resource()
+        table_name = cls.Meta.table_name
+        kwargs['Keys'] = keys_to_get
+        kwargs = {'RequestItems': {cls.Meta.table_name: kwargs}}
+
+        data = resource.batch_get_item(**kwargs)
+        item_data = data.get(RESPONSES).get(cls.Meta.table_name)  # type: ignore
+        unprocessed_items = data.get(UNPROCESSED_KEYS).get(
+            cls.Meta.table_name, {}).get(KEYS, None)  # type: ignore
+        return item_data, unprocessed_items
 
     @classmethod
     def exists(cls) -> bool:
