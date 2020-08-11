@@ -134,28 +134,26 @@ class TestModel(unittest.TestCase):
         assert res.SK == self.friend1.SK
 
     def test_batch_get(self):
-        items = [{
-            'PK': self.friend1.PK,
-            'SK': self.friend1.SK
-        }, {
-            'PK': self.group1.PK,
-            'SK': self.group1.SK
-        }]
-        records = BaseModel.batch_get(items).records
-        assert records[0].PK == self.friend1.PK
-        assert records[0].SK == self.friend1.SK
-        assert records[1].PK == self.group1.PK
-        assert records[1].SK == self.group1.SK
+        items = [
+            (self.friend1.PK, self.friend1.SK),
+            (self.group1.PK, self.group1.SK)
+        ]
+        records = BaseModel.batch_get(items)
+        records = records.records
+        assert records[0].PK == self.group1.PK
+        assert records[0].SK == self.group1.SK
+        assert records[1].PK == self.friend1.PK
+        assert records[1].SK == self.friend1.SK
 
     def test_update(self):
-        expected = {'update': {
+        expected = {
             'ID': 'first',
             'ListAttr': ['One', 'Two', 'three', 'four'],
             'NumberAttr': Decimal('-3'),
             'PK': 'update#first',
             'SK': 'update#meta',
             'SetAttr': {'Alphabet', 'A', 'B'},
-            'Type': 'update_friend'}
+            'Type': 'update_friend'
         }
         self.friend_to_update.update(actions=[
             FriendToUpdate.NumberAttr.set(FriendToUpdate.NumberAttr - 5),
@@ -163,8 +161,7 @@ class TestModel(unittest.TestCase):
             FriendToUpdate.StringAttr.remove(),
             FriendToUpdate.ListAttr.set(FriendToUpdate.ListAttr.append(['three', 'four']))
         ])
-        records = BaseModel.query(
+        got = BaseModel.get(
             self.friend_to_update.PK,
-            FriendToUpdate.SK.eq('update#meta'))
-        got = records.collection(output={})
+            self.friend_to_update.SK).to_dict()
         assert expected == got
