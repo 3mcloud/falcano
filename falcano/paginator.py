@@ -90,7 +90,7 @@ class Results:
             id_attr = primary_key
 
         # Get the item as a dict, set the ID to id_attr attribute
-        item = record.to_dict(primary_key=id_attr)
+        item = record.to_dict(primary_key=id_attr, convert_decimal=True)
 
         # New thing found, make it a dict
         if item_type not in output:

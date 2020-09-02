@@ -154,6 +154,7 @@ class Model(metaclass=MetaModel):
             attributes[self.get_range_key().attr_name] = range_key
         self.attribute_values: Dict[str, Any] = {}
         self.initialize_attributes(_user_instantiated, **attributes)
+        self.convert_decimal = True
 
     class Meta():
         '''
@@ -749,8 +750,10 @@ class Model(metaclass=MetaModel):
         data = table.put_item(**kwargs)
         return data
 
-    def to_dict(self, primary_key: str = 'PK'):
+    def to_dict(self, primary_key: str = 'PK', convert_decimal: bool = True):
         '''Convert a pynamo model into a dictionary for JSON serialization'''
+        # temporary override of converting decimal to int/float
+        self.convert_decimal = convert_decimal
         ret_dict = {}
         for name, attr in self.attribute_values.items():
             ret_dict[name] = self._attr2obj(attr)
