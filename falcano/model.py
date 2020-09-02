@@ -737,7 +737,7 @@ class Model(metaclass=MetaModel):
         kwargs[KEY] = self._get_keys()
         table = self.resource().Table(self.Meta.table_name)
         res = table.update_item(**kwargs)['Attributes']
-        return Model._models[res['Type']](**res)
+        return Model._models[res[self.Meta.model_type]](**res)
 
     def save(self, condition=None) -> Dict[str, Any]:
         ''' Save a falcano model into dynamodb '''
