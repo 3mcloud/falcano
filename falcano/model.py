@@ -3,6 +3,7 @@ Handle connections and queries to the Team Model
 '''
 import time
 import os
+from decimal import Decimal
 from datetime import datetime
 from inspect import getmembers
 import logging
@@ -769,12 +770,27 @@ class Model(metaclass=MetaModel):
                 _set.add(self._attr2obj(item))
             return _set
         if isinstance(attr, MapAttribute):
+            # Convert the map attribute with boto3 typedeserializer
             _dict = {}
+            deserializer = boto3.dynamodb.types.TypeDeserializer()
             for key, value in attr.attribute_values.items():
+                _dict[key] = deserializer.deserialize(value)
+            # Traverse the new dict and convert to simple types
+            # for easier serialization later
+            return self._attr2obj(_dict)
+        if isinstance(attr, dict):
+            # Handle dictionary types
+            _dict = {}
+            for key, value in attr.items():
                 _dict[key] = self._attr2obj(value)
             return _dict
         if isinstance(attr, datetime):
             return attr.isoformat()
+        if isinstance(attr, Decimal):
+            if self.convert_decimal:
+                # Attempt to convert a more accurate decimal to float or int
+                return int(attr) if attr % 1 == 0 else float(attr)
+            return attr
 
         return attr
 
