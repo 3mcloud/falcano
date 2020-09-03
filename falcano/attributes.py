@@ -654,13 +654,13 @@ class MapAttribute(Attribute[Mapping[_KT, _VT]], AttributeContainer):
                 local_attr.update_attribute_paths(path_segment)
 
     def __eq__(self, other):
-        # if self._is_attribute_container():
-        #     return AttributeContainer.__eq__(self, other)
+        if self._is_attribute_container():
+            return AttributeContainer.__eq__(self, other)
         return Attribute.__eq__(self, other)
 
     def __ne__(self, other):
-        # if self._is_attribute_container():
-        #     return AttributeContainer.__ne__(self, other)
+        if self._is_attribute_container():
+            return AttributeContainer.__ne__(self, other)
         return Attribute.__ne__(self, other)
 
     def __iter__(self):
