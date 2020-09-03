@@ -30,7 +30,8 @@ from boto3.dynamodb.conditions import (
 )
 from falcano.constants import (
     MAP, NUMBER, STRING_SET, LIST, NULL, MAP_SHORT, LIST_SHORT,
-    NUMBER_SHORT, STRING_SHORT, ATTR_TYPE_MAP, STRING, DATETIME_FORMAT
+    NUMBER_SHORT, STRING_SHORT, ATTR_TYPE_MAP, STRING, DATETIME_FORMAT,
+    BOOLEAN,
 )
 from falcano.expressions.operand import Path
 
@@ -930,6 +931,22 @@ class ListAttribute(Attribute[List[_T]]):
             deserialized_lst.append(class_for_deserialize.deserialize(attr_value))
         return deserialized_lst
 
+class BooleanAttribute(Attribute[bool]):
+    '''
+    A class for boolean attributes
+    '''
+    attr_type = BOOLEAN
+
+    def serialize(self, value):
+        if value is None:
+            return None
+        elif value:
+            return True
+        else:
+            return False
+
+    def deserialize(self, value):
+        return bool(value)
 
 def _fast_parse_utc_datestring(datestring):
     # Method to quickly parse strings formatted with '%Y-%m-%dT%H:%M:%S.%f+0000'.
@@ -955,7 +972,7 @@ DESERIALIZE_CLASS_MAP: Dict[str, Attribute] = {
     LIST_SHORT: ListAttribute(),
     NUMBER_SHORT: NumberAttribute(),
     STRING_SHORT: UnicodeAttribute(),
-    # BOOLEAN: BooleanAttribute(),
+    BOOLEAN: BooleanAttribute(),
     MAP_SHORT: MapAttribute(),
     NULL: NullAttribute()
 
@@ -966,7 +983,7 @@ SERIALIZE_CLASS_MAP = {
     dict: MapAttribute(),
     list: ListAttribute(),
     set: ListAttribute(),
-    # bool: BooleanAttribute(),
+    bool: BooleanAttribute(),
     float: NumberAttribute(),
     int: NumberAttribute(),
     str: UnicodeAttribute(),
@@ -977,7 +994,7 @@ SERIALIZE_KEY_MAP = {
     dict: MAP_SHORT,
     list: LIST_SHORT,
     set: LIST_SHORT,
-    # bool: BOOLEAN,
+    bool: BOOLEAN,
     float: NUMBER_SHORT,
     int: NUMBER_SHORT,
     str: STRING_SHORT,
