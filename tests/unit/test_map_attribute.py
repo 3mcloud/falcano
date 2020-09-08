@@ -166,3 +166,23 @@ def test_attribute_paths_wrapping():
     assert mid_map_a_test_map.attr_path == ['dyn_out_map', 'mid_map_a', 'dyn_in_map_a', 'dyn_test_map']
     assert mid_map_b_test_map.attr_name == 'dyn_test_map'
     assert mid_map_b_test_map.attr_path == ['dyn_out_map', 'mid_map_b', 'dyn_in_map_b', 'dyn_test_map']
+
+def test_nested_maps():
+
+    class OuterMapAttribute(MapAttribute):
+        mid_map = MapAttribute()
+
+    class MyModel(Model):
+        key = UnicodeAttribute(hash_key=True)
+        outer_map = OuterMapAttribute()
+
+    create_dict = {
+        'key': 'id#1',
+        'outer_map':{
+            'mid_map':{
+                'foo': 'bar',
+            },
+        },
+    }
+    test_model = MyModel(**create_dict)
+    test_model.to_dict()

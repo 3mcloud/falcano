@@ -12,6 +12,7 @@ from typing import (
     Mapping, List, cast
 )
 import boto3
+import boto3.dynamodb.types as dynamo_types
 import botocore
 from falcano.settings import get_settings_value
 from falcano.indexes import Index, GlobalSecondaryIndex
@@ -22,7 +23,8 @@ from falcano.attributes import (
     AttributeContainerMeta,
     MapAttribute,
     TTLAttribute,
-    UTCDateTimeAttribute
+    UTCDateTimeAttribute,
+    ListAttribute,
 )
 from falcano.expressions.update import Update
 
@@ -749,8 +751,10 @@ class Model(metaclass=MetaModel):
         data = table.put_item(**kwargs)
         return data
 
-    def to_dict(self, primary_key: str = 'PK', convert_decimal: bool = True):
+    def to_dict(self, primary_key: str = None, convert_decimal: bool = True):
         '''Convert a pynamo model into a dictionary for JSON serialization'''
+        if not primary_key:
+            primary_key = self.get_hash_key().attr_name
         # temporary override of converting decimal to int/float
         self.convert_decimal = convert_decimal
         ret_dict = {}
@@ -774,15 +778,34 @@ class Model(metaclass=MetaModel):
         if isinstance(attr, MapAttribute):
             # Convert the map attribute with boto3 typedeserializer
             _dict = {}
-            deserializer = boto3.dynamodb.types.TypeDeserializer()
-            for key, value in attr.attribute_values.items():
-                _dict[key] = deserializer.deserialize(value)
+            attribute_values = attr.attribute_values
+            try:
+                # top level map attributes will have a key
+                # of 'M' that need to be deserialized
+                deserializer = dynamo_types.TypeDeserializer()
+                attribute_values = deserializer.deserialize(attribute_values)
+            except TypeError:
+                pass
+            for key, value in attribute_values.items():
+                _dict[key] = self._attr2obj(value)
             # Traverse the new dict and convert to simple types
             # for easier serialization later
-            return self._attr2obj(_dict)
+            return _dict
         if isinstance(attr, dict):
             # Handle dictionary types
             _dict = {}
+            try:
+                # convert types like {'baz':{'S':'qux'}} to
+                # {'baz':'qux'}. Because of the recursion
+                # we can get {'S': 'qux'} converted to 'qux'
+                # and we just return that simple value.
+                deserializer = dynamo_types.TypeDeserializer()
+                attr = deserializer.deserialize(attr)
+                if not isinstance(attr, dict):
+                    return attr
+            except TypeError:
+                pass
+
             for key, value in attr.items():
                 _dict[key] = self._attr2obj(value)
             return _dict
