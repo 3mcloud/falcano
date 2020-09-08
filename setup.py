@@ -13,9 +13,6 @@ AUTHOR_EMAIL = 'ewalker3@mmm.com'
 DESCRIPTION = 'Falcano'
 URL = 'https://github.com/3mcloud/falcano'
 REQUIRES = [
-    'bottle==0.12.18',
-    'cache',
-    'stringcase',
     'boto3'
 ]
 REQUIRES_TEST = [

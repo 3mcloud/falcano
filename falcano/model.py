@@ -11,7 +11,6 @@ from typing import (
     Any, Optional, Dict, Tuple, Type,
     Mapping, List, cast
 )
-import stringcase
 import boto3
 import botocore
 from falcano.settings import get_settings_value
