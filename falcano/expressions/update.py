@@ -1,5 +1,7 @@
+'''
+Handle update expressions
+'''
 from typing import List
-from typing import TYPE_CHECKING
 
 from falcano.constants import BINARY_SET_SHORT, NUMBER_SET_SHORT, NUMBER_SHORT, STRING_SET_SHORT
 

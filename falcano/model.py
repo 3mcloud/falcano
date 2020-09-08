@@ -184,6 +184,7 @@ class Model(metaclass=MetaModel):
             dynamodb = boto3.client('dynamodb', endpoint_url=self.host)
             self._table = dynamodb.Table(name)
 
+    # pylint: disable=duplicate-code
     def _set_defaults(self, _user_instantiated: bool = True) -> None:
         '''
         Sets and fields that provide a default value

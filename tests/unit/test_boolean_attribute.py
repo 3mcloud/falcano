@@ -1,6 +1,10 @@
+'''
+Tests for the Boolean Attribute
+'''
 from falcano.attributes import BooleanAttribute
 from falcano.constants import BOOLEAN
 
+# pylint: disable=no-self-use
 class TestBooleanAttribute:
     '''
     Tests boolean attributes
@@ -12,7 +16,7 @@ class TestBooleanAttribute:
         attr = BooleanAttribute()
         assert attr is not None
 
-        assert attr.attr_type == BOOLEAN
+        assert attr.attr_type == BOOLEAN # pylint: disable=no-member
         attr = BooleanAttribute(default=True)
         assert attr.default is True
 

@@ -19,7 +19,7 @@ jobs:
           python -m pip install .[dev]
       - name: Lint
         run: |
-          pylint falcano tests
+          pylint falcano tests/**/*.py
       - name: Unit
         run: >
           python -m pytest -vvv
