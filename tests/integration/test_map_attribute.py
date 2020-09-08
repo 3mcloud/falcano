@@ -71,3 +71,47 @@ class TestMapAttribute(unittest.TestCase):
             converted = item.to_dict(convert_decimal=False)
 
         assert isinstance(converted['Data']['baz']['quux'], Decimal)
+
+    def test_nested_maps(self):
+        class OuterMapAttribute(MapAttribute):
+            mid_map = MapAttribute()
+
+        class MyModel(Model):
+            class Meta(Model.Meta):
+                table_name = 'falcano-e2e'
+                billing_mode = 'PAY_PER_REQUEST'
+            PK = UnicodeAttribute(hash_key=True)
+            SK = UnicodeAttribute(range_key=True)
+            outer_map = OuterMapAttribute()
+            outer_list = ListAttribute()
+            Type = UnicodeAttribute(default='test_nested_map')
+
+        create_dict = {
+            'PK': 'a',
+            'SK': 'b',
+            'outer_map':{
+                'mid_map':{
+                    'foo': 'bar',
+                },
+            },
+            'outer_list': [
+                OuterMapAttribute(**{'mid_map': {'baz': 'qux'}}),
+            ]
+        }
+        test_model = MyModel(**create_dict)
+        test_model.save()
+        res = MyModel.query('a', MyModel.SK.eq('b'))
+        assert next(res).to_dict() == {
+            'ID': 'a',
+            'PK': 'a',
+            'SK': 'b',
+            'Type': 'test_nested_map',
+            'outer_map':{
+                'mid_map':{
+                    'foo': 'bar',
+                },
+            },
+            'outer_list': [
+                {'mid_map': {'baz': 'qux'}},
+            ]
+        }
