@@ -7,7 +7,7 @@ import subprocess
 from setuptools import setup, find_packages
 
 NAME = 'falcano'
-VERSION = '0.0.4'
+VERSION = '0.0.5'
 AUTHOR = 'Eric Walker'
 AUTHOR_EMAIL = 'ewalker3@mmm.com'
 DESCRIPTION = 'Falcano'
