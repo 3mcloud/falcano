@@ -13,7 +13,9 @@ from typing import (
 )
 import boto3
 import boto3.dynamodb.types as dynamo_types
+from boto3.dynamodb.conditions import ConditionExpressionBuilder
 import botocore
+import stringcase
 from falcano.settings import get_settings_value
 from falcano.indexes import Index, GlobalSecondaryIndex
 from falcano.paginator import Results
@@ -33,9 +35,10 @@ from falcano.constants import (
     BILLING_MODE, GLOBAL_SECONDARY_INDEXES, LOCAL_SECONDARY_INDEXES, READ_CAPACITY_UNITS, ITEM,
     WRITE_CAPACITY_UNITS, PROJECTION, INDEX_NAME, PROJECTION_TYPE, PAY_PER_REQUEST_BILLING_MODE,
     ATTRIBUTES, META_CLASS_NAME, REGION, HOST, ATTR_DEFINITIONS, KEY_SCHEMA, KEY_TYPE, TABLE_NAME,
-    PROVISIONED_THROUGHPUT, NON_KEY_ATTRIBUTES, RANGE_KEY, CONDITION_EXPRESSION, UPDATE_EXPRESSION,
-    EXPRESSION_ATTRIBUTE_NAMES, EXPRESSION_ATTRIBUTE_VALUES, RETURN_VALUES, ALL_NEW, KEY,
-    RESPONSES, BATCH_GET_PAGE_LIMIT, UNPROCESSED_KEYS, KEYS
+    PROVISIONED_THROUGHPUT, NON_KEY_ATTRIBUTES, RANGE_KEY, HASH_KEY, CONDITION_EXPRESSION,
+    UPDATE_EXPRESSION, EXPRESSION_ATTRIBUTE_NAMES, EXPRESSION_ATTRIBUTE_VALUES, RETURN_VALUES,
+    ALL_NEW, KEY, RESPONSES, BATCH_GET_PAGE_LIMIT, UNPROCESSED_KEYS, KEYS, TRANSACT_CONDITION_CHECK,
+    TRANSACT_DELETE, TRANSACT_PUT, TRANSACT_UPDATE
 )
 
 logger = logging.getLogger('entity-base')  # pylint: disable=invalid-name
@@ -618,6 +621,11 @@ class Model(metaclass=MetaModel):
             if attr_map:
                 logger.warning('Unsupported argument: attr_map')
 
+            if attr.is_hash_key:
+                attrs[HASH] = serialized
+            if attr.is_range_key:
+                attrs[RANGE] = serialized
+
             attrs[ATTRIBUTES][attr.attr_name] = serialized
 
         return attrs
@@ -688,6 +696,13 @@ class Model(metaclass=MetaModel):
         This covers cases where an attribute name has been overridden via 'attr_name'.
         '''
         return cls._dynamo_to_python_attrs.get(dynamo_key, dynamo_key)  # type: ignore
+
+    @classmethod
+    def transact_write(cls):
+        '''
+        Returns a TransactWrite
+        '''
+        return TransactWrite(cls, connection=cls._connection)
 
     @classmethod
     def batch_write(cls, auto_commit: bool = True):
@@ -819,6 +834,147 @@ class Model(metaclass=MetaModel):
 
         return attr
 
+    def _get_save_args(self, attributes=True, null_check=True):
+        '''
+        Gets the proper *args, **kwargs for saving and retrieving this object
+
+        This is used for serializing items to be saved, or for serializing just the keys.
+
+        :param attributes: If True, then attributes are included.
+        :param null_check: If True, then attributes are checked for null.
+        '''
+        kwargs = {}
+        serialized = self._serialize(null_check=null_check)
+        kwargs[stringcase.snakecase(HASH_KEY)] = serialized.get(HASH)
+        if RANGE in serialized:
+            kwargs[stringcase.snakecase(RANGE_KEY)] = serialized.get(RANGE)
+        if attributes:
+            kwargs[stringcase.snakecase(ATTRIBUTES)] = serialized.get(ATTRIBUTES)
+        return kwargs
+
+    def get_operation_kwargs_from_instance(
+        self,
+        key: str = KEY,
+        actions=None,
+        condition=None,
+        return_values_on_condition_failure=None,
+    ) -> Dict[str, Any]:
+        is_update = actions is not None
+        is_delete = actions is None and key is KEY
+        save_kwargs = self._get_save_args(null_check=not is_update)
+
+        # version_condition = self._handle_version_attribute(
+        #     serialized_attributes={} if is_delete else save_kwargs,
+        #     actions=actions
+        # )
+        # if version_condition is not None:
+        #     condition &= version_condition
+
+        kwargs: Dict[str, Any] = dict(
+            table_name=self.Meta.table_name,
+            key=key,
+            actions=actions,
+            condition=condition,
+            return_values_on_condition_failure=return_values_on_condition_failure
+        )
+        if not is_update:
+            kwargs.update(save_kwargs)
+        elif RANGE_KEY in save_kwargs:
+            kwargs[stringcase.snakecase(RANGE_KEY)] = save_kwargs[stringcase.snakecase(RANGE_KEY)]
+        return self.get_operation_kwargs(**kwargs)
+
+    @classmethod
+    def get_operation_kwargs_from_class(cls, hash_key, range_key=None, condition=None):
+        kwargs = {}
+        kwargs['TableName'] = cls.Meta.table_name
+
+        serializer = dynamo_types.TypeSerializer()
+        # serialized_hash = serializer.serialize(hash_key)
+        # kwargs['Key'] = {cls.get_hash_key().attr_name: serialized_hash}
+        # if range_key:
+        #     serialized_range = serializer.serialize(range_key)
+        #     kwargs['Key'][cls.get_range_key().attr_name] = serialized_range
+        kwargs.update(cls.get_identifier_map(hash_key, range_key))
+        if condition:
+            expr, expr_names, expr_values = ConditionExpressionBuilder().build_expression(condition)
+
+            kwargs[CONDITION_EXPRESSION] = expr
+            kwargs[EXPRESSION_ATTRIBUTE_NAMES] = expr_names
+            kwargs[EXPRESSION_ATTRIBUTE_VALUES] = {
+                k: serializer.serialize(v) for k, v in expr_values.items()}
+
+        return kwargs
+
+    @classmethod
+    def get_identifier_map(cls, hash_key, range_key=None):
+        serializer = dynamo_types.TypeSerializer()
+        serialized_hash = serializer.serialize(hash_key)
+        kwargs = {KEY: {cls.get_hash_key().attr_name: serialized_hash}}
+        if range_key:
+            serialized_range = serializer.serialize(range_key)
+            kwargs[KEY][cls.get_range_key().attr_name] = serialized_range
+        return kwargs
+
+    @classmethod
+    def get_operation_kwargs(
+        cls,
+        table_name: str,
+        hash_key: str,
+        range_key: Optional[str] = None,
+        key: str = KEY,
+        attributes: Optional[Any] = None,
+        attributes_to_get: Optional[Any] = None,
+        actions=None,
+        condition=None,
+        consistent_read: Optional[bool] = None,
+        return_values: Optional[str] = None,
+        return_consumed_capacity: Optional[str] = None,
+        return_item_collection_metrics: Optional[str] = None,
+        return_values_on_condition_failure: Optional[str] = None
+    ) -> Dict:
+
+        serializer = dynamo_types.TypeSerializer()
+        operation_kwargs: Dict[str, Any] = {}
+        name_placeholders: Dict[str, str] = {}
+        expression_attribute_values: Dict[str, Any] = {}
+
+        operation_kwargs[TABLE_NAME] = table_name
+        operation_kwargs.update(cls.get_identifier_map(hash_key, range_key))
+        if attributes and operation_kwargs.get(ITEM) is not None:
+            attrs = cls.get_item_attribute_map(table_name, attributes)
+            operation_kwargs[ITEM].update(attrs[ITEM])
+        # if attributes_to_get is not None:
+        #     projection_expression = create_projection_expression(
+        #         attributes_to_get, name_placeholders)
+        #     operation_kwargs[PROJECTION_EXPRESSION] = projection_expression
+        if condition is not None:
+            condition_expression, name_placeholders, expr_values = ConditionExpressionBuilder().build_expression(condition)
+            expression_attribute_values = {
+                k: serializer.serialize(v) for k, v in expr_values.items()}
+            operation_kwargs[CONDITION_EXPRESSION] = condition_expression
+        if consistent_read is not None:
+            operation_kwargs[CONSISTENT_READ] = consistent_read
+        if return_values is not None:
+            operation_kwargs.update(cls.get_return_values_map(return_values))
+        if return_values_on_condition_failure is not None:
+            operation_kwargs.update(cls.get_return_values_on_condition_failure_map(
+                return_values_on_condition_failure))
+        if return_consumed_capacity is not None:
+            operation_kwargs.update(cls.get_consumed_capacity_map(return_consumed_capacity))
+        if return_item_collection_metrics is not None:
+            operation_kwargs.update(cls.get_item_collection_map(return_item_collection_metrics))
+        if actions is not None:
+            update_expression = Update(*actions)
+            operation_kwargs[UPDATE_EXPRESSION] = update_expression.serialize(
+                name_placeholders,
+                expression_attribute_values
+            )
+        if name_placeholders:
+            operation_kwargs[EXPRESSION_ATTRIBUTE_NAMES] = name_placeholders
+        if expression_attribute_values:
+            operation_kwargs[EXPRESSION_ATTRIBUTE_VALUES] = expression_attribute_values
+        return operation_kwargs
+
 
 class ModelContextManager():
     '''
@@ -834,6 +990,132 @@ class ModelContextManager():
 
     def __enter__(self):
         return self
+
+
+class Transaction:
+
+    '''
+    Base class for a type of transaction operation
+    '''
+
+    def __init__(self, connection, return_consumed_capacity: Optional[str] = None) -> None:
+        self._connection = connection
+        self._return_consumed_capacity = return_consumed_capacity
+
+    def _commit(self):
+        raise NotImplementedError()
+
+    def __enter__(self) -> 'Transaction':
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        if exc_type is None and exc_val is None and exc_tb is None:
+            self._commit()
+
+
+# class TransactGet(Generic[_M], Transaction):
+
+#     _results: Optional[List] = None
+
+#     def __init__(self, *args, **kwargs):
+#         self._get_items: List[Dict] = []
+#         self._futures: List[_ModelFuture] = []
+#         super(TransactGet, self).__init__(*args, **kwargs)
+
+#     def get(self, model_cls: Type[_M], hash_key: _KeyType, range_key: Optional[_KeyType] = None) -> _ModelFuture[_M]:
+#         '''
+#         Adds the operation arguments for an item to list of models to get
+#         returns a _ModelFuture object as a placeholder
+
+#         :param model_cls:
+#         :param hash_key:
+#         :param range_key:
+#         :return:
+#         '''
+#         operation_kwargs = model_cls.get_operation_kwargs_from_class(hash_key, range_key=range_key)
+#         model_future = _ModelFuture(model_cls)
+#         self._futures.append(model_future)
+#         self._get_items.append(operation_kwargs)
+#         return model_future
+
+#     @staticmethod
+#     def _update_futures(futures: List[_ModelFuture], results: List) -> None:
+#         for model, data in zip(futures, results):
+#             model.update_with_raw_data(data.get(ITEM))
+
+#     def _commit(self) -> Any:
+#         response = self._connection.transact_get_items(
+#             get_items=self._get_items,
+#             return_consumed_capacity=self._return_consumed_capacity
+#         )
+
+#         results = response[RESPONSES]
+#         self._results = results
+#         self._update_futures(self._futures, results)
+#         return response
+
+
+class TransactWrite(Transaction):
+
+    def __init__(
+        self,
+        client_request_token: Optional[str] = None,
+        return_item_collection_metrics: Optional[str] = None,
+        **kwargs: Any,
+    ) -> None:
+        super(TransactWrite, self).__init__(**kwargs)
+        self._client_request_token: Optional[str] = client_request_token
+        self._return_item_collection_metrics = return_item_collection_metrics
+        self._condition_check_items: List[Dict] = []
+        self._delete_items: List[Dict] = []
+        self._put_items: List[Dict] = []
+        self._update_items: List[Dict] = []
+        self._models_for_version_attribute_update: List[Any] = []
+
+    def condition_check(self, model_cls, hash_key, range_key=None, condition=None):
+        if condition is None:
+            raise TypeError('`condition` cannot be None')
+        operation_kwargs = model_cls.get_operation_kwargs_from_class(
+            hash_key=hash_key,
+            range_key=range_key,
+            condition=condition
+        )
+        self._condition_check_items.append({TRANSACT_CONDITION_CHECK: operation_kwargs})
+
+    def delete(self, model, condition=None) -> None:
+        operation_kwargs = model.get_operation_kwargs_from_instance(condition=condition)
+        self._delete_items.append({TRANSACT_DELETE: operation_kwargs})
+
+    def save(self, model, condition, return_values: Optional[str] = None) -> None:
+        operation_kwargs = model.get_operation_kwargs_from_instance(
+            key=ITEM,
+            condition=condition,
+            return_values_on_condition_failure=return_values
+        )
+        self._put_items.append({TRANSACT_PUT: operation_kwargs})
+        # self._models_for_version_attribute_update.append(model)
+
+    def update(self, model, actions, condition=None, return_values: Optional[str] = None) -> None:
+        operation_kwargs = model.get_operation_kwargs_from_instance(
+            actions=actions,
+            condition=condition,
+            return_values_on_condition_failure=return_values
+        )
+        self._update_items.append({TRANSACT_UPDATE: operation_kwargs})
+        # self._models_for_version_attribute_update.append(model)
+
+    def _commit(self) -> Any:
+        items = self._condition_check_items + self._delete_items + self._put_items + self._update_items
+        print(items)
+        response = self._connection.transact_write_items(
+            TransactItems=items,
+            # ClientRequestToken=self._client_request_token,
+            # ReturnConsumedCapacity=self._return_consumed_capacity,
+            # ReturnItemCollectionMetrics=self._return_item_collection_metrics,
+        )
+        # for model in self._models_for_version_attribute_update:
+        #     model.update_local_version_attribute()
+        return response
 
 
 class BatchWrite(ModelContextManager):

@@ -79,8 +79,8 @@ class TestModel(unittest.TestCase):
         self.friend1 = FriendModel('friend#drue', 'friend#meta',
                                    Name='Dan Rue', CreatedAt=datetime(2014, 5, 12, 23, 30))
         self.friend1.save()
-        friend2 = FriendModel('friend#jberk', 'friend#meta', Name='Justin Berk')
-        friend2.save()
+        self.friend2 = FriendModel('friend#jberk', 'friend#meta', Name='Justin Berk')
+        self.friend2.save()
         friend3 = FriendModel('friend#fbladilsh', 'friend#meta', Name='Frank Bladilsh')
         friend3.save()
 
@@ -165,3 +165,9 @@ class TestModel(unittest.TestCase):
             self.friend_to_update.PK,
             self.friend_to_update.SK).to_dict()
         assert expected == got
+
+    def test_transact_write(self):
+        with BaseModel.transact_write() as writer:
+            writer.condition_check(FriendModel, 'friend#drue', 'friend#meta',
+                                   FriendModel.Name.eq('Dan Rue'))
+            writer.delete(self.friend2)
