@@ -39,7 +39,7 @@ class FriendModel(BaseModel):
     A model for testing
     """
     Type = UnicodeAttribute(default='friend')
-    Name = UnicodeAttribute()
+    Name = UnicodeAttribute(null=True)
     Description = UnicodeAttribute(null=True)
     CreatedAt = UTCDateTimeAttribute(default=datetime.utcnow())
 
@@ -81,8 +81,8 @@ class TestModel(unittest.TestCase):
         self.friend1.save()
         self.friend2 = FriendModel('friend#jberk', 'friend#meta', Name='Justin Berk')
         self.friend2.save()
-        friend3 = FriendModel('friend#fbladilsh', 'friend#meta', Name='Frank Bladilsh')
-        friend3.save()
+        self.friend3 = FriendModel('friend#fbladilsh', 'friend#meta', Name='Frank Bladilsh')
+        self.friend3.save()
 
         self.group1 = FriendGroup('group#group1', 'group#meta', Name='Friendship Squad')
         self.group1.save()
@@ -167,7 +167,16 @@ class TestModel(unittest.TestCase):
         assert expected == got
 
     def test_transact_write(self):
+        new_friend = FriendModel('friend#new', 'friend#meta', Name='New Friend')
         with BaseModel.transact_write() as writer:
             writer.condition_check(FriendModel, 'friend#drue', 'friend#meta',
                                    FriendModel.Name.eq('Dan Rue'))
             writer.delete(self.friend2)
+            writer.save(new_friend)
+            action = FriendToUpdate.NumberAttr.add(5)
+            writer.update(self.friend_to_update, [
+                action
+            ], condition=FriendToUpdate.NumberAttr.eq(2))
+        for record in BaseModel.scan().records:
+            print(record.to_dict())
+            # TODO: check the transacted updates happened
