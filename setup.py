@@ -13,7 +13,7 @@ AUTHOR_EMAIL = 'ewalker3@mmm.com'
 DESCRIPTION = 'Falcano'
 URL = 'https://github.com/3mcloud/falcano'
 REQUIRES = [
-    'boto3'
+    'stringcase'
 ]
 REQUIRES_TEST = [
     'rsa>=4.3',
@@ -25,6 +25,7 @@ REQUIRES_TEST = [
     'safety>=1.8.7',
     'paste',
     'ptvsd',
+    'boto3',  # Lambda includes boto
 ]
 
 with open('README.md', 'r') as fh:

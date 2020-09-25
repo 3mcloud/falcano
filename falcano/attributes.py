@@ -931,6 +931,7 @@ class ListAttribute(Attribute[List[_T]]):
             deserialized_lst.append(class_for_deserialize.deserialize(attr_value))
         return deserialized_lst
 
+
 class BooleanAttribute(Attribute[bool]):
     '''
     A class for boolean attributes
@@ -947,6 +948,7 @@ class BooleanAttribute(Attribute[bool]):
 
     def deserialize(self, value):
         return bool(value)
+
 
 def _fast_parse_utc_datestring(datestring):
     # Method to quickly parse strings formatted with '%Y-%m-%dT%H:%M:%S.%f+0000'.

@@ -38,7 +38,7 @@ from falcano.constants import (
     PROVISIONED_THROUGHPUT, NON_KEY_ATTRIBUTES, RANGE_KEY, HASH_KEY, CONDITION_EXPRESSION,
     UPDATE_EXPRESSION, EXPRESSION_ATTRIBUTE_NAMES, EXPRESSION_ATTRIBUTE_VALUES, RETURN_VALUES,
     ALL_NEW, KEY, RESPONSES, BATCH_GET_PAGE_LIMIT, UNPROCESSED_KEYS, KEYS, TRANSACT_CONDITION_CHECK,
-    TRANSACT_DELETE, TRANSACT_PUT, TRANSACT_UPDATE
+    TRANSACT_DELETE, TRANSACT_PUT, TRANSACT_UPDATE, RETURN_VALUES_VALUES, RETURN_VALUES_ON_CONDITION_FAILURE, RETURN_VALUES_ON_CONDITION_FAILURE_VALUES
 )
 
 logger = logging.getLogger('entity-base')  # pylint: disable=invalid-name
@@ -861,7 +861,8 @@ class Model(metaclass=MetaModel):
     ) -> Dict[str, Any]:
         is_update = actions is not None
         is_delete = actions is None and key is KEY
-        save_kwargs = self._get_save_args(null_check=not is_update)
+        save_kwargs = self._get_save_args(
+            attributes=True, null_check=not is_update)
 
         # version_condition = self._handle_version_attribute(
         #     serialized_attributes={} if is_delete else save_kwargs,
@@ -879,8 +880,11 @@ class Model(metaclass=MetaModel):
         )
         if not is_update:
             kwargs.update(save_kwargs)
-        elif RANGE_KEY in save_kwargs:
-            kwargs[stringcase.snakecase(RANGE_KEY)] = save_kwargs[stringcase.snakecase(RANGE_KEY)]
+        else:
+            kwargs[stringcase.snakecase(HASH_KEY)] = save_kwargs[stringcase.snakecase(HASH_KEY)]
+            if stringcase.snakecase(RANGE_KEY) in save_kwargs:
+                kwargs[stringcase.snakecase(
+                    RANGE_KEY)] = save_kwargs[stringcase.snakecase(RANGE_KEY)]
         return self.get_operation_kwargs(**kwargs)
 
     @classmethod
@@ -906,14 +910,30 @@ class Model(metaclass=MetaModel):
         return kwargs
 
     @classmethod
-    def get_identifier_map(cls, hash_key, range_key=None):
+    def get_identifier_map(cls, hash_key, range_key=None, key=KEY):
         serializer = dynamo_types.TypeSerializer()
         serialized_hash = serializer.serialize(hash_key)
-        kwargs = {KEY: {cls.get_hash_key().attr_name: serialized_hash}}
+        kwargs = {key: {cls.get_hash_key().attr_name: serialized_hash}}
         if range_key:
             serialized_range = serializer.serialize(range_key)
-            kwargs[KEY][cls.get_range_key().attr_name] = serialized_range
+            kwargs[key][cls.get_range_key().attr_name] = serialized_range
         return kwargs
+
+    @classmethod
+    def get_return_values_on_condition_failure_map(
+        cls, return_values_on_condition_failure: str
+    ) -> Dict:
+        """
+        Builds the return values map that is common to several operations
+        """
+        if return_values_on_condition_failure.upper() not in RETURN_VALUES_VALUES:
+            raise ValueError("{} must be one of {}".format(
+                RETURN_VALUES_ON_CONDITION_FAILURE,
+                RETURN_VALUES_ON_CONDITION_FAILURE_VALUES
+            ))
+        return {
+            RETURN_VALUES_ON_CONDITION_FAILURE: str(return_values_on_condition_failure).upper()
+        }
 
     @classmethod
     def get_operation_kwargs(
@@ -939,18 +959,23 @@ class Model(metaclass=MetaModel):
         expression_attribute_values: Dict[str, Any] = {}
 
         operation_kwargs[TABLE_NAME] = table_name
-        operation_kwargs.update(cls.get_identifier_map(hash_key, range_key))
-        if attributes and operation_kwargs.get(ITEM) is not None:
-            attrs = cls.get_item_attribute_map(table_name, attributes)
-            operation_kwargs[ITEM].update(attrs[ITEM])
+        operation_kwargs.update(cls.get_identifier_map(hash_key, range_key, key=key))
+        if attributes and operation_kwargs.get(ITEM) is not None:  # put
+            serializer = dynamo_types.TypeSerializer()
+
+            attrs = {k: serializer.serialize(v) for k, v in attributes.items()}
+            print(attrs)
+            # attrs = cls.get_item_attribute_map(table_name, attributes)
+            operation_kwargs[ITEM].update(attrs)
         # if attributes_to_get is not None:
         #     projection_expression = create_projection_expression(
         #         attributes_to_get, name_placeholders)
         #     operation_kwargs[PROJECTION_EXPRESSION] = projection_expression
         if condition is not None:
-            condition_expression, name_placeholders, expr_values = ConditionExpressionBuilder().build_expression(condition)
-            expression_attribute_values = {
-                k: serializer.serialize(v) for k, v in expr_values.items()}
+            condition_expression, name_placeholders, expression_attribute_values = ConditionExpressionBuilder(
+            ).build_expression(condition)
+            # expression_attribute_values = {
+            #     k: serializer.serialize(v) for k, v in expr_values.items()}
             operation_kwargs[CONDITION_EXPRESSION] = condition_expression
         if consistent_read is not None:
             operation_kwargs[CONSISTENT_READ] = consistent_read
@@ -965,14 +990,20 @@ class Model(metaclass=MetaModel):
             operation_kwargs.update(cls.get_item_collection_map(return_item_collection_metrics))
         if actions is not None:
             update_expression = Update(*actions)
+            # Update expressions use backwards name placeholders
+            name_placeholders = {v: k for k, v in name_placeholders.items()}
             operation_kwargs[UPDATE_EXPRESSION] = update_expression.serialize(
                 name_placeholders,
                 expression_attribute_values
             )
+            name_placeholders = {v: k for k, v in name_placeholders.items()}
         if name_placeholders:
             operation_kwargs[EXPRESSION_ATTRIBUTE_NAMES] = name_placeholders
         if expression_attribute_values:
-            operation_kwargs[EXPRESSION_ATTRIBUTE_VALUES] = expression_attribute_values
+            serializer = dynamo_types.TypeSerializer()
+
+            operation_kwargs[EXPRESSION_ATTRIBUTE_VALUES] = {
+                k: serializer.serialize(v) for k, v in expression_attribute_values.items()}
         return operation_kwargs
 
 
@@ -1086,7 +1117,7 @@ class TransactWrite(Transaction):
         operation_kwargs = model.get_operation_kwargs_from_instance(condition=condition)
         self._delete_items.append({TRANSACT_DELETE: operation_kwargs})
 
-    def save(self, model, condition, return_values: Optional[str] = None) -> None:
+    def save(self, model, condition=None, return_values: Optional[str] = None) -> None:
         operation_kwargs = model.get_operation_kwargs_from_instance(
             key=ITEM,
             condition=condition,
@@ -1106,7 +1137,6 @@ class TransactWrite(Transaction):
 
     def _commit(self) -> Any:
         items = self._condition_check_items + self._delete_items + self._put_items + self._update_items
-        print(items)
         response = self._connection.transact_write_items(
             TransactItems=items,
             # ClientRequestToken=self._client_request_token,
