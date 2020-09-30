@@ -180,3 +180,12 @@ class TestModel(unittest.TestCase):
         for record in BaseModel.scan().records:
             print(record.to_dict())
             # TODO: check the transacted updates happened
+
+    def test_transact_get(self):
+        want = self.friend1.to_dict()
+        del want['CreatedAt']
+        with BaseModel.transact_get() as getter:
+            got_friend = getter.get(FriendModel, 'friend#drue', 'friend#meta')
+        got = got_friend.get().to_dict()
+        del got['CreatedAt']
+        assert want == got

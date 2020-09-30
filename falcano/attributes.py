@@ -153,9 +153,9 @@ class Attribute(Generic[_T]):
         '''
         return value
 
-    # def get_value(self, value: Any) -> Any:
-    #     serialized_dynamo_type = ATTR_TYPE_MAP[self.attr_type]
-    #     return value.get(serialized_dynamo_type)
+    def get_value(self, value: Any) -> Any:
+        serialized_dynamo_type = ATTR_TYPE_MAP[self.attr_type]
+        return value.get(serialized_dynamo_type)
 
     def __iter__(self):
         # Because we define __getitem__ below for condition expression support
