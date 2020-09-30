@@ -177,9 +177,11 @@ class TestModel(unittest.TestCase):
             writer.update(self.friend_to_update, [
                 action
             ], condition=FriendToUpdate.NumberAttr.eq(2))
-        for record in BaseModel.scan().records:
-            print(record.to_dict())
-            # TODO: check the transacted updates happened
+        with pytest.raises(Exception):
+            BaseModel.get(self.friend2.PK, self.friend2.SK)
+        BaseModel.get(new_friend.PK, new_friend.SK)
+        assert self.friend_to_update.NumberAttr + \
+            5 == BaseModel.get(self.friend_to_update.PK, self.friend_to_update.SK).NumberAttr
 
     def test_transact_get(self):
         want = self.friend1.to_dict()
