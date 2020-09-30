@@ -19,7 +19,7 @@ import stringcase
 from falcano.settings import get_settings_value
 from falcano.indexes import Index, GlobalSecondaryIndex
 from falcano.paginator import Results
-from falcano.exceptions import TableDoesNotExist, DoesNotExist
+from falcano.exceptions import TableDoesNotExist, DoesNotExist, InvalidStateError
 from falcano.attributes import (
     Attribute,
     AttributeContainerMeta,
@@ -38,7 +38,8 @@ from falcano.constants import (
     PROVISIONED_THROUGHPUT, NON_KEY_ATTRIBUTES, RANGE_KEY, HASH_KEY, CONDITION_EXPRESSION,
     UPDATE_EXPRESSION, EXPRESSION_ATTRIBUTE_NAMES, EXPRESSION_ATTRIBUTE_VALUES, RETURN_VALUES,
     ALL_NEW, KEY, RESPONSES, BATCH_GET_PAGE_LIMIT, UNPROCESSED_KEYS, KEYS, TRANSACT_CONDITION_CHECK,
-    TRANSACT_DELETE, TRANSACT_PUT, TRANSACT_UPDATE, RETURN_VALUES_VALUES, RETURN_VALUES_ON_CONDITION_FAILURE, RETURN_VALUES_ON_CONDITION_FAILURE_VALUES
+    TRANSACT_DELETE, TRANSACT_PUT, TRANSACT_UPDATE, RETURN_VALUES_VALUES, RETURN_VALUES_ON_CONDITION_FAILURE, RETURN_VALUES_ON_CONDITION_FAILURE_VALUES,
+    TRANSACT_GET, TRANSACT_ITEMS, RETURN_CONSUMED_CAPACITY
 )
 
 logger = logging.getLogger('entity-base')  # pylint: disable=invalid-name
@@ -705,6 +706,13 @@ class Model(metaclass=MetaModel):
         return TransactWrite(cls, connection=cls._connection)
 
     @classmethod
+    def transact_get(cls):
+        '''
+        Returns a TransactGet
+        '''
+        return TransactGet(connection=cls._connection)
+
+    @classmethod
     def batch_write(cls, auto_commit: bool = True):
         '''
         Returns a BatchWrite context manager for a batch operation.
@@ -964,8 +972,6 @@ class Model(metaclass=MetaModel):
             serializer = dynamo_types.TypeSerializer()
 
             attrs = {k: serializer.serialize(v) for k, v in attributes.items()}
-            print(attrs)
-            # attrs = cls.get_item_attribute_map(table_name, attributes)
             operation_kwargs[ITEM].update(attrs)
         # if attributes_to_get is not None:
         #     projection_expression = create_projection_expression(
@@ -1023,6 +1029,32 @@ class ModelContextManager():
         return self
 
 
+class _ModelFuture():
+    '''
+    A placeholder object for a model that does not exist yet
+
+    For example: when performing a TransactGet request, this is a stand-in for a model that will be returned
+    when the operation is complete
+    '''
+
+    def __init__(self, model_cls) -> None:
+        self._model_cls = model_cls
+        self._model = None
+        self._resolved = False
+
+    def update_with_raw_data(self, data) -> None:
+        if data is not None and data != {}:
+            self._model = self._model_cls.from_raw_data(data=data)
+        self._resolved = True
+
+    def get(self):
+        if not self._resolved:
+            raise InvalidStateError()
+        if self._model:
+            return self._model
+        raise self._model_cls.DoesNotExist()
+
+
 class Transaction:
 
     '''
@@ -1044,46 +1076,47 @@ class Transaction:
             self._commit()
 
 
-# class TransactGet(Generic[_M], Transaction):
+class TransactGet(Transaction):
 
-#     _results: Optional[List] = None
+    _results: Optional[List] = None
 
-#     def __init__(self, *args, **kwargs):
-#         self._get_items: List[Dict] = []
-#         self._futures: List[_ModelFuture] = []
-#         super(TransactGet, self).__init__(*args, **kwargs)
+    def __init__(self, *args, **kwargs):
+        self._get_items: List[Dict] = []
+        self._futures: List[_ModelFuture] = []
+        super(TransactGet, self).__init__(*args, **kwargs)
 
-#     def get(self, model_cls: Type[_M], hash_key: _KeyType, range_key: Optional[_KeyType] = None) -> _ModelFuture[_M]:
-#         '''
-#         Adds the operation arguments for an item to list of models to get
-#         returns a _ModelFuture object as a placeholder
+    def get(self, model_cls, hash_key, range_key=None):
+        '''
+        Adds the operation arguments for an item to list of models to get
+        returns a _ModelFuture object as a placeholder
 
-#         :param model_cls:
-#         :param hash_key:
-#         :param range_key:
-#         :return:
-#         '''
-#         operation_kwargs = model_cls.get_operation_kwargs_from_class(hash_key, range_key=range_key)
-#         model_future = _ModelFuture(model_cls)
-#         self._futures.append(model_future)
-#         self._get_items.append(operation_kwargs)
-#         return model_future
+        :param model_cls:
+        :param hash_key:
+        :param range_key:
+        :return:
+        '''
+        operation_kwargs = model_cls.get_operation_kwargs_from_class(hash_key, range_key=range_key)
+        operation_kwargs = {TRANSACT_GET: operation_kwargs}
+        model_future = _ModelFuture(model_cls)
+        self._futures.append(model_future)
+        self._get_items.append(operation_kwargs)
+        return model_future
 
-#     @staticmethod
-#     def _update_futures(futures: List[_ModelFuture], results: List) -> None:
-#         for model, data in zip(futures, results):
-#             model.update_with_raw_data(data.get(ITEM))
+    @staticmethod
+    def _update_futures(futures: List[_ModelFuture], results: List) -> None:
+        for model, data in zip(futures, results):
+            model.update_with_raw_data(data.get(ITEM))
 
-#     def _commit(self) -> Any:
-#         response = self._connection.transact_get_items(
-#             get_items=self._get_items,
-#             return_consumed_capacity=self._return_consumed_capacity
-#         )
+    def _commit(self) -> Any:
+        kwargs = {TRANSACT_ITEMS: self._get_items}
+        if self._return_consumed_capacity:
+            kwargs[RETURN_CONSUMED_CAPACITY] = self._return_consumed_capacity
 
-#         results = response[RESPONSES]
-#         self._results = results
-#         self._update_futures(self._futures, results)
-#         return response
+        response = self._connection.transact_get_items(**kwargs)
+
+        results = response[RESPONSES]
+        self._results = results
+        self._update_futures(self._futures, results)
 
 
 class TransactWrite(Transaction):

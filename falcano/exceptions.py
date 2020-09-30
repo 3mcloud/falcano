@@ -40,3 +40,10 @@ class DoesNotExist(FalcanoException):
     def __init__(self) -> None:
         msg = 'Item does not exist'
         super(DoesNotExist, self).__init__(msg)
+
+
+class InvalidStateError(FalcanoException):
+    '''
+    Raises when the internal state of an operation context is invalid
+    '''
+    msg = 'Operation in invalid state'
