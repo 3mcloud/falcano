@@ -108,6 +108,13 @@ class Attribute(Generic[_T]):
         # AttributeContainerMeta._initialize_attributes will ensure this is a string
         self.attr_path: List[str] = [attr_name]  # type: ignore
 
+    def __delete__(self, instance):
+        '''This is called when an attribute is deleted from a model.
+
+        The model handles removing this, no action is needed.
+        '''
+        pass
+
     @property
     def attr_name(self) -> Optional[str]:
         '''Name of the attribute'''

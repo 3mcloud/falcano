@@ -186,8 +186,14 @@ class TestModel(unittest.TestCase):
     def test_transact_get(self):
         want = self.friend1.to_dict()
         del want['CreatedAt']
+        attributes_to_get = [
+            FriendModel.PK.attr_name,
+            FriendModel.SK.attr_name,
+            FriendModel.Description.attr_name,
+            FriendModel.Name.attr_name,
+            FriendModel.Type.attr_name
+        ]
         with BaseModel.transact_get() as getter:
-            got_friend = getter.get(FriendModel, 'friend#drue', 'friend#meta')
+            got_friend = getter.get(FriendModel, 'friend#drue', 'friend#meta', attributes_to_get)
         got = got_friend.get().to_dict()
-        del got['CreatedAt']
         assert want == got
