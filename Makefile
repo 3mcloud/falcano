@@ -1,4 +1,5 @@
 AWS_DEFAULT_REGION?=us-east-1
+PROJECT=falcano
 
 build-test:
 	docker build -t falcano:test --target test .
@@ -8,10 +9,14 @@ develop: build-test
 	docker-compose up -d
 	docker-compose exec falcano-develop bash
 
-unit: build-test
-	docker run -it --rm \
-	-v ${PWD}:/work \
-	falcano:test
+
+unit:
+	python -m pytest -vvv \
+		-W ignore::DeprecationWarning \
+		--cov-report html \
+		--cov-report term-missing \
+		--cov=$(PROJECT) \
+		tests/unit$(target)
 
 integration:
 	python -m pytest -s tests/integration

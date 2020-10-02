@@ -29,6 +29,7 @@ from falcano.attributes import (
     ListAttribute,
 )
 from falcano.expressions.update import Update
+from falcano.expressions.projection import create_projection_expression
 
 from falcano.constants import (
     BATCH_WRITE_PAGE_LIMIT, DELETE, PUT, ATTR_TYPE_MAP, ATTR_NAME, ATTR_TYPE, RANGE, HASH, ITEMS,
@@ -39,7 +40,7 @@ from falcano.constants import (
     UPDATE_EXPRESSION, EXPRESSION_ATTRIBUTE_NAMES, EXPRESSION_ATTRIBUTE_VALUES, RETURN_VALUES,
     ALL_NEW, KEY, RESPONSES, BATCH_GET_PAGE_LIMIT, UNPROCESSED_KEYS, KEYS, TRANSACT_CONDITION_CHECK,
     TRANSACT_DELETE, TRANSACT_PUT, TRANSACT_UPDATE, RETURN_VALUES_VALUES, RETURN_VALUES_ON_CONDITION_FAILURE, RETURN_VALUES_ON_CONDITION_FAILURE_VALUES,
-    TRANSACT_GET, TRANSACT_ITEMS, RETURN_CONSUMED_CAPACITY
+    TRANSACT_GET, TRANSACT_ITEMS, RETURN_CONSUMED_CAPACITY, PROJECTION_EXPRESSION
 )
 
 logger = logging.getLogger('entity-base')  # pylint: disable=invalid-name
@@ -160,6 +161,14 @@ class Model(metaclass=MetaModel):
         self.attribute_values: Dict[str, Any] = {}
         self.initialize_attributes(_user_instantiated, **attributes)
         self.convert_decimal = True
+
+    def __delattr__(self, name):
+        '''Remove an attribute from a model.
+
+        Useful for gets with projection expressions
+        '''
+        del self.__dict__['attribute_values'][name]
+        return super().__delattr__(name)
 
     class Meta():
         '''
@@ -896,7 +905,7 @@ class Model(metaclass=MetaModel):
         return self.get_operation_kwargs(**kwargs)
 
     @classmethod
-    def get_operation_kwargs_from_class(cls, hash_key, range_key=None, condition=None):
+    def get_operation_kwargs_from_class(cls, hash_key, range_key=None, condition=None, attributes_to_get=None):
         kwargs = {}
         kwargs['TableName'] = cls.Meta.table_name
 
@@ -907,6 +916,7 @@ class Model(metaclass=MetaModel):
         #     serialized_range = serializer.serialize(range_key)
         #     kwargs['Key'][cls.get_range_key().attr_name] = serialized_range
         kwargs.update(cls.get_identifier_map(hash_key, range_key))
+        expr_names = {}
         if condition:
             expr, expr_names, expr_values = ConditionExpressionBuilder().build_expression(condition)
 
@@ -914,7 +924,13 @@ class Model(metaclass=MetaModel):
             kwargs[EXPRESSION_ATTRIBUTE_NAMES] = expr_names
             kwargs[EXPRESSION_ATTRIBUTE_VALUES] = {
                 k: serializer.serialize(v) for k, v in expr_values.items()}
-
+        if attributes_to_get:
+            # flip expr names
+            expr_names = {v: k for k, v in expr_names.items()}
+            kwargs[PROJECTION_EXPRESSION] = create_projection_expression(
+                attributes_to_get, expr_names)
+            expr_names = {v: k for k, v in expr_names.items()}
+            kwargs[EXPRESSION_ATTRIBUTE_NAMES] = expr_names
         return kwargs
 
     @classmethod
@@ -973,15 +989,13 @@ class Model(metaclass=MetaModel):
 
             attrs = {k: serializer.serialize(v) for k, v in attributes.items()}
             operation_kwargs[ITEM].update(attrs)
-        # if attributes_to_get is not None:
-        #     projection_expression = create_projection_expression(
-        #         attributes_to_get, name_placeholders)
-        #     operation_kwargs[PROJECTION_EXPRESSION] = projection_expression
+        if attributes_to_get is not None:
+            projection_expression = create_projection_expression(
+                attributes_to_get, name_placeholders)
+            operation_kwargs[PROJECTION_EXPRESSION] = projection_expression
         if condition is not None:
             condition_expression, name_placeholders, expression_attribute_values = ConditionExpressionBuilder(
             ).build_expression(condition)
-            # expression_attribute_values = {
-            #     k: serializer.serialize(v) for k, v in expr_values.items()}
             operation_kwargs[CONDITION_EXPRESSION] = condition_expression
         if consistent_read is not None:
             operation_kwargs[CONSISTENT_READ] = consistent_read
@@ -1045,6 +1059,11 @@ class _ModelFuture():
     def update_with_raw_data(self, data) -> None:
         if data is not None and data != {}:
             self._model = self._model_cls.from_raw_data(data=data)
+            for attr in self._model.to_dict():
+                # Remove the attributes from the Model that were not returned
+                # This should only be used for Gets with Projection Expressions
+                if attr not in data and getattr(self._model, attr, None) is not None:
+                    delattr(self._model, attr)
         self._resolved = True
 
     def get(self):
@@ -1085,7 +1104,7 @@ class TransactGet(Transaction):
         self._futures: List[_ModelFuture] = []
         super(TransactGet, self).__init__(*args, **kwargs)
 
-    def get(self, model_cls, hash_key, range_key=None):
+    def get(self, model_cls, hash_key, range_key=None, attributes_to_get=None):
         '''
         Adds the operation arguments for an item to list of models to get
         returns a _ModelFuture object as a placeholder
@@ -1095,7 +1114,8 @@ class TransactGet(Transaction):
         :param range_key:
         :return:
         '''
-        operation_kwargs = model_cls.get_operation_kwargs_from_class(hash_key, range_key=range_key)
+        operation_kwargs = model_cls.get_operation_kwargs_from_class(
+            hash_key, range_key=range_key, attributes_to_get=attributes_to_get)
         operation_kwargs = {TRANSACT_GET: operation_kwargs}
         model_future = _ModelFuture(model_cls)
         self._futures.append(model_future)
@@ -1115,6 +1135,7 @@ class TransactGet(Transaction):
         response = self._connection.transact_get_items(**kwargs)
 
         results = response[RESPONSES]
+
         self._results = results
         self._update_futures(self._futures, results)
 
