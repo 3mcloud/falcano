@@ -44,7 +44,7 @@ class Project(BaseModel):
     Name = UnicodeAttribute()
 
 ```
-If the table doesn't already exist, make sure you create it before trying to insert items.
+If the table doesn't already exist, make sure you create it before trying to insert items. Just comment this out if you already have a table created.
 
 ```python
 BaseModel.create_table(wait=True)
@@ -68,4 +68,3 @@ returned_project = Project.get(
 
 print(returned_project.to_dict())
 ```
-
