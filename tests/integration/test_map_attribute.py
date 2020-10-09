@@ -1,25 +1,17 @@
 import unittest
-from datetime import datetime
 from decimal import Decimal
-from botocore.exceptions import ClientError
-import pytest
 from _pytest.monkeypatch import MonkeyPatch
 from falcano.model import Model
 from falcano.attributes import (
     UnicodeAttribute,
-    UTCDateTimeAttribute,
-    NumberAttribute,
     ListAttribute,
-    UnicodeSetAttribute,
     MapAttribute,
 )
-from falcano.indexes import GlobalSecondaryIndex, AllProjection
-
 
 class TestModel(Model):
     '''Test model with meta'''
     class Meta(Model.Meta):
-        table_name = 'falcano-e2e'
+        table_name = 'falcano-map-attr-e2e'
         billing_mode = 'PAY_PER_REQUEST'
     PK = UnicodeAttribute(hash_key=True)
     SK = UnicodeAttribute(range_key=True)
@@ -78,7 +70,7 @@ class TestMapAttribute(unittest.TestCase):
 
         class MyModel(Model):
             class Meta(Model.Meta):
-                table_name = 'falcano-e2e'
+                table_name = 'falcano-map-attr-e2e'
                 billing_mode = 'PAY_PER_REQUEST'
             PK = UnicodeAttribute(hash_key=True)
             SK = UnicodeAttribute(range_key=True)
@@ -89,8 +81,8 @@ class TestMapAttribute(unittest.TestCase):
         create_dict = {
             'PK': 'a',
             'SK': 'b',
-            'outer_map':{
-                'mid_map':{
+            'outer_map': {
+                'mid_map': {
                     'foo': 'bar',
                 },
             },
@@ -106,9 +98,53 @@ class TestMapAttribute(unittest.TestCase):
             'PK': 'a',
             'SK': 'b',
             'Type': 'test_nested_map',
-            'outer_map':{
-                'mid_map':{
+            'outer_map': {
+                'mid_map': {
                     'foo': 'bar',
+                },
+            },
+            'outer_list': [
+                {'mid_map': {'baz': 'qux'}},
+            ]
+        }
+
+    def test_nested_maps_with_list(self):
+        class OuterMapAttribute(MapAttribute):
+            mid_map = MapAttribute()
+
+        class MyModel(Model):
+            class Meta(Model.Meta):
+                table_name = 'falcano-map-attr-e2e'
+                billing_mode = 'PAY_PER_REQUEST'
+            PK = UnicodeAttribute(hash_key=True)
+            SK = UnicodeAttribute(range_key=True)
+            outer_map = OuterMapAttribute()
+            outer_list = ListAttribute()
+            Type = UnicodeAttribute(default='test_nested_map')
+
+        create_dict = {
+            'PK': 'a',
+            'SK': 'b',
+            'outer_map': {
+                'mid_map': {
+                    'foo': ['bar'],
+                },
+            },
+            'outer_list': [
+                OuterMapAttribute(**{'mid_map': {'baz': 'qux'}}),
+            ]
+        }
+        test_model = MyModel(**create_dict)
+        test_model.save()
+        res = MyModel.query('a', MyModel.SK.eq('b'))
+        assert next(res).to_dict() == {
+            'ID': 'a',
+            'PK': 'a',
+            'SK': 'b',
+            'Type': 'test_nested_map',
+            'outer_map': {
+                'mid_map': {
+                    'foo': ['bar'],
                 },
             },
             'outer_list': [
