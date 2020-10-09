@@ -816,7 +816,7 @@ class Model(metaclass=MetaModel):
                 # of 'M' that need to be deserialized
                 deserializer = dynamo_types.TypeDeserializer()
                 attribute_values = deserializer.deserialize(attribute_values)
-            except TypeError:
+            except (TypeError, AttributeError):
                 pass
             for key, value in attribute_values.items():
                 _dict[key] = self._attr2obj(value)
@@ -835,7 +835,7 @@ class Model(metaclass=MetaModel):
                 attr = deserializer.deserialize(attr)
                 if not isinstance(attr, dict):
                     return attr
-            except TypeError:
+            except (TypeError, AttributeError):
                 pass
 
             for key, value in attr.items():
