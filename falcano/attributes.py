@@ -4,6 +4,7 @@ Classes for individual model attributes
 import collections.abc
 from copy import deepcopy
 import calendar
+import decimal
 import time
 from datetime import datetime, timedelta
 from dateutil.parser import parse
@@ -504,6 +505,8 @@ class UTCDateTimeAttribute(Attribute[datetime]):
         '''
         Takes a datetime object and returns a string
         '''
+        if isinstance(value, str):
+            return value
         if value.tzinfo is None:
             value = value.replace(tzinfo=tzutc())
         fmt = value.astimezone(tzutc()).strftime(DATETIME_FORMAT)
@@ -995,6 +998,7 @@ SERIALIZE_CLASS_MAP = {
     bool: BooleanAttribute(),
     float: NumberAttribute(),
     int: NumberAttribute(),
+    decimal.Decimal: NumberAttribute(),
     str: UnicodeAttribute(),
 }
 

@@ -19,7 +19,7 @@ unit:
 		tests/unit$(target)
 
 integration:
-	python -m pytest -s tests/integration
+	python -m pytest -s tests/integration$(target)
 
 e2e:
 	python -m pytest -s tests/e2e

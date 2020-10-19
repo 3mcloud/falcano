@@ -19,28 +19,29 @@ import stringcase
 from falcano.settings import get_settings_value
 from falcano.indexes import Index, GlobalSecondaryIndex
 from falcano.paginator import Results
-from falcano.exceptions import TableDoesNotExist, DoesNotExist, InvalidStateError
+from falcano.exceptions import DoesNotExist, InvalidStateError
 from falcano.attributes import (
     Attribute,
     AttributeContainerMeta,
     MapAttribute,
     TTLAttribute,
-    UTCDateTimeAttribute,
-    ListAttribute,
 )
 from falcano.expressions.update import Update
 from falcano.expressions.projection import create_projection_expression
 
 from falcano.constants import (
-    BATCH_WRITE_PAGE_LIMIT, DELETE, PUT, ATTR_TYPE_MAP, ATTR_NAME, ATTR_TYPE, RANGE, HASH, ITEMS,
+    BATCH_WRITE_PAGE_LIMIT, DELETE, PUT, ATTR_TYPE_MAP, ATTR_NAME, ATTR_TYPE, RANGE, HASH,
     BILLING_MODE, GLOBAL_SECONDARY_INDEXES, LOCAL_SECONDARY_INDEXES, READ_CAPACITY_UNITS, ITEM,
     WRITE_CAPACITY_UNITS, PROJECTION, INDEX_NAME, PROJECTION_TYPE, PAY_PER_REQUEST_BILLING_MODE,
     ATTRIBUTES, META_CLASS_NAME, REGION, HOST, ATTR_DEFINITIONS, KEY_SCHEMA, KEY_TYPE, TABLE_NAME,
-    PROVISIONED_THROUGHPUT, NON_KEY_ATTRIBUTES, RANGE_KEY, HASH_KEY, CONDITION_EXPRESSION,
+    PROVISIONED_THROUGHPUT, NON_KEY_ATTRIBUTES, RANGE_KEY, HASH_KEY, CONDITION_EXPRESSION, REQUEST_ITEMS,
     UPDATE_EXPRESSION, EXPRESSION_ATTRIBUTE_NAMES, EXPRESSION_ATTRIBUTE_VALUES, RETURN_VALUES,
     ALL_NEW, KEY, RESPONSES, BATCH_GET_PAGE_LIMIT, UNPROCESSED_KEYS, KEYS, TRANSACT_CONDITION_CHECK,
     TRANSACT_DELETE, TRANSACT_PUT, TRANSACT_UPDATE, RETURN_VALUES_VALUES, RETURN_VALUES_ON_CONDITION_FAILURE, RETURN_VALUES_ON_CONDITION_FAILURE_VALUES,
-    TRANSACT_GET, TRANSACT_ITEMS, RETURN_CONSUMED_CAPACITY, PROJECTION_EXPRESSION
+    TRANSACT_GET, TRANSACT_ITEMS, RETURN_CONSUMED_CAPACITY, PROJECTION_EXPRESSION, CONSISTENT_READ, KEY_CONDITION_EXPRESSION,
+    FILTER_EXPRESSION, SELECT, ALL_PROJECTED_ATTRIBUTES, SCAN_INDEX_FORWARD, LIMIT, EXCLUSIVE_START_KEY,
+    SPECIFIC_ATTRIBUTES, RETURN_ITEM_COLL_METRICS_VALUES, RETURN_ITEM_COLL_METRICS, RETURN_CONSUMED_CAPACITY_VALUES,
+    TABLE_KEY, TABLE_STATUS, ITEMS, ACTION
 )
 
 logger = logging.getLogger('entity-base')  # pylint: disable=invalid-name
@@ -177,7 +178,7 @@ class Model(metaclass=MetaModel):
         max_pool_connections = 20
         connect_timeout_seconds = 10
         read_timeout_seconds = 5
-        billing_mode = 'PAY_PER_REQUEST'
+        billing_mode = PAY_PER_REQUEST_BILLING_MODE
         table_name = os.getenv('DYNAMODB_TABLE')
         host = os.getenv('ENDPOINT_URL', None)
         _table = None
@@ -337,7 +338,7 @@ class Model(metaclass=MetaModel):
 
                 }
                 if isinstance(index, GlobalSecondaryIndex):
-                    if getattr(cls.Meta, 'billing_mode', None) != PAY_PER_REQUEST_BILLING_MODE:
+                    if getattr(cls.Meta, stringcase.snakecase(BILLING_MODE), None) != PAY_PER_REQUEST_BILLING_MODE:
                         idx[PROVISIONED_THROUGHPUT] = {
                             READ_CAPACITY_UNITS: index.Meta.read_capacity_units,
                             WRITE_CAPACITY_UNITS: index.Meta.write_capacity_units
@@ -419,7 +420,7 @@ class Model(metaclass=MetaModel):
             while True:
                 try:
                     response = cls.connection().describe_table(TableName=cls.Meta.table_name)
-                    status = response['Table']['TableStatus']
+                    status = response[TABLE_KEY][TABLE_STATUS]
                     if status in ('CREATING', 'UPDATING', 'DELETING', 'ARCHIVING'):
                         time.sleep(2)
                     else:
@@ -438,6 +439,7 @@ class Model(metaclass=MetaModel):
         Provides a high level scan API
         '''
         table = cls.resource().Table(cls.Meta.table_name)
+        kwargs = cls.get_operation_kwargs_from_class(**kwargs)
         response = table.scan(**kwargs)
         return Results(
             Model,
@@ -455,9 +457,12 @@ class Model(metaclass=MetaModel):
         Provides a high level get_item API
         '''
         table = cls.resource().Table(cls.Meta.table_name)
-        kwargs['Key'] = {cls.get_hash_key().attr_name: hash_key}
+        kwargs['add_identifier_map'] = True
+        kwargs['serialize'] = False
+        kwargs[stringcase.snakecase(HASH_KEY)] = hash_key
         if range_key is not None:
-            kwargs['Key'][cls.get_range_key().attr_name] = range_key
+            kwargs['range_key'] = range_key
+        kwargs = cls.get_operation_kwargs_from_class(**kwargs)
         res = table.get_item(**kwargs)
         if res and (data := res.get(ITEM)):
             return Model._models[data[cls.Meta.model_type]](**data)
@@ -506,7 +511,7 @@ class Model(metaclass=MetaModel):
 
         return Results(
             Model,
-            {'Items': records}
+            {ITEMS: records}
         )
 
     @classmethod
@@ -520,9 +525,8 @@ class Model(metaclass=MetaModel):
         logger.debug('Fetching a BatchGetItem page')
 
         resource = cls.resource()
-        table_name = cls.Meta.table_name
-        kwargs['Keys'] = keys_to_get
-        kwargs = {'RequestItems': {cls.Meta.table_name: kwargs}}
+        kwargs[KEYS] = keys_to_get
+        kwargs = {REQUEST_ITEMS: {cls.Meta.table_name: kwargs}}
 
         data = resource.batch_get_item(**kwargs)
         item_data = data.get(RESPONSES).get(cls.Meta.table_name)  # type: ignore
@@ -567,43 +571,32 @@ class Model(metaclass=MetaModel):
         :param last_evaluated_key: If set, provides the starting point for query.
         :param page_size: Page size of the query to DynamoDB
         '''
-
+        select=None
         if index_name:
             hash_attr = index_name._hash_key_attribute()
+            select=ALL_PROJECTED_ATTRIBUTES
         else:
             hash_attr = cls.get_hash_key()
 
-        query = {
-            'TableName': cls.Meta.table_name,
-            'KeyConditionExpression': hash_attr.eq(hash_key),
-        }
-        if range_key_condition:
-            query['KeyConditionExpression'] = query['KeyConditionExpression'] & range_key_condition
-        if filter_condition:
-            query['FilterExpression'] = filter_condition
-        if consistent_read:
-            query['ConsistentRead'] = consistent_read
-        if index_name:
-            query['IndexName'] = index_name.Meta.index_name
-            query['Select'] = 'ALL_PROJECTED_ATTRIBUTES'
-        if scan_index_forward:
-            query['ScanIndexForward'] = scan_index_forward
-        if limit:
-            query['Limit'] = limit
-        if last_evaluated_key:
-            query['ExclusiveStartKey'] = last_evaluated_key
         if attributes_to_get:
-            # Legacy version
-            # query['Select'] = 'SPECIFIC_ATTRIBUTES'
-            # query['AttributesToGet'] = attributes_to_get
+            select = SPECIFIC_ATTRIBUTES
 
-            # Use #A1, #A2, ... to avoid reserved word conflicts
-            names = {f'#A{i}': attr for i, attr in enumerate(attributes_to_get)}
-            query['Select'] = 'SPECIFIC_ATTRIBUTES'
-            query['ProjectionExpression'] = ', '.join(list(names.keys()))
-            query['ExpressionAttributeNames'] = names
-        if page_size:
-            query['Limit'] = page_size
+        kwargs: Dict[str, Any] = dict(
+            hash_key=hash_key,
+            range_key_condition=range_key_condition,
+            filter_condition=filter_condition,
+            consistent_read=consistent_read,
+            index_name=index_name,
+            scan_index_forward=scan_index_forward,
+            limit=limit,
+            last_evaluated_key=last_evaluated_key,
+            attributes_to_get=attributes_to_get,
+            page_size=page_size,
+            key_condition_expression=hash_attr.eq(hash_key),
+            select=select
+        )
+
+        query = cls.get_operation_kwargs_from_class(**kwargs)
         logger.debug('--query %s', query)
         table = cls.resource().Table(cls.Meta.table_name)
         response = table.query(**query)
@@ -735,11 +728,9 @@ class Model(metaclass=MetaModel):
         return BatchWrite(cls, auto_commit=auto_commit)
 
     def delete(self, condition=None) -> Any:
-        kwargs = {}
+        kwargs = {'add_identifier_map': True, 'condition': condition}
         table = self.resource().Table(self.Meta.table_name)
-        if condition:
-            kwargs['ConditionExpression'] = condition
-        kwargs['Key'] = self._get_keys()
+        kwargs = self.get_operation_kwargs_from_instance(**kwargs)
         return table.delete_item(**kwargs)
 
     def update(self, actions, condition=None):
@@ -750,35 +741,21 @@ class Model(metaclass=MetaModel):
             raise TypeError('the value of `actions` is expected to be a non-empty list')
 
         kwargs = {
-            RETURN_VALUES: ALL_NEW,
+            stringcase.snakecase(RETURN_VALUES): ALL_NEW,
+            'actions': actions,
+            'add_identifier_map': True,
+            'condition': condition
         }
-        if condition is not None:
-            kwargs[CONDITION_EXPRESSION] = condition
 
-        name_placeholders: Dict[str, str] = {}
-        expression_attribute_values: Dict[str, Any] = {}
-        if actions is not None:
-            update_expression = Update(*actions)
-            kwargs[UPDATE_EXPRESSION] = update_expression.serialize(
-                name_placeholders,
-                expression_attribute_values
-            )
-        if name_placeholders:
-            kwargs[EXPRESSION_ATTRIBUTE_NAMES] = {v: k for k, v in name_placeholders.items()}
-        if expression_attribute_values:
-            kwargs[EXPRESSION_ATTRIBUTE_VALUES] = expression_attribute_values
-
-        # Get the key and put it in kwargs
-        kwargs[KEY] = self._get_keys()
+        kwargs = self.get_operation_kwargs_from_instance(**kwargs)
         table = self.resource().Table(self.Meta.table_name)
-        res = table.update_item(**kwargs)['Attributes']
+        res = table.update_item(**kwargs)[ATTRIBUTES]
         return Model._models[res[self.Meta.model_type]](**res)
 
     def save(self, condition=None) -> Dict[str, Any]:
         ''' Save a falcano model into dynamodb '''
-        kwargs = {'Item': self._serialize()[ATTRIBUTES]}
-        if condition:
-            kwargs['ConditionExpression'] = condition
+        kwargs = {'item': True, 'condition': condition}
+        kwargs = self.get_operation_kwargs_from_instance(**kwargs)
         table = self.resource().Table(self.Meta.table_name)
         data = table.put_item(**kwargs)
         return data
@@ -851,7 +828,7 @@ class Model(metaclass=MetaModel):
 
         return attr
 
-    def _get_save_args(self, attributes=True, null_check=True):
+    def _get_save_args(self, item=False, attributes=True, null_check=True):
         '''
         Gets the proper *args, **kwargs for saving and retrieving this object
 
@@ -867,6 +844,8 @@ class Model(metaclass=MetaModel):
             kwargs[stringcase.snakecase(RANGE_KEY)] = serialized.get(RANGE)
         if attributes:
             kwargs[stringcase.snakecase(ATTRIBUTES)] = serialized.get(ATTRIBUTES)
+        if item:
+            kwargs[stringcase.snakecase(ITEM)] = serialized.get(ATTRIBUTES)
         return kwargs
 
     def get_operation_kwargs_from_instance(
@@ -874,12 +853,15 @@ class Model(metaclass=MetaModel):
         key: str = KEY,
         actions=None,
         condition=None,
+        return_values=None,
         return_values_on_condition_failure=None,
+        serialize=False,
+        add_identifier_map=False,
+        item=False
     ) -> Dict[str, Any]:
         is_update = actions is not None
-        is_delete = actions is None and key is KEY
         save_kwargs = self._get_save_args(
-            attributes=True, null_check=not is_update)
+                item=item, attributes=True, null_check=not is_update)
 
         # version_condition = self._handle_version_attribute(
         #     serialized_attributes={} if is_delete else save_kwargs,
@@ -889,10 +871,13 @@ class Model(metaclass=MetaModel):
         #     condition &= version_condition
 
         kwargs: Dict[str, Any] = dict(
+            serialize=serialize,
+            add_identifier_map=add_identifier_map,
             table_name=self.Meta.table_name,
             key=key,
             actions=actions,
             condition=condition,
+            return_values=return_values,
             return_values_on_condition_failure=return_values_on_condition_failure
         )
         if not is_update:
@@ -904,43 +889,57 @@ class Model(metaclass=MetaModel):
                     RANGE_KEY)] = save_kwargs[stringcase.snakecase(RANGE_KEY)]
         return self.get_operation_kwargs(**kwargs)
 
-    @classmethod
-    def get_operation_kwargs_from_class(cls, hash_key, range_key=None, condition=None, attributes_to_get=None):
-        kwargs = {}
-        kwargs['TableName'] = cls.Meta.table_name
-
-        serializer = dynamo_types.TypeSerializer()
-        # serialized_hash = serializer.serialize(hash_key)
-        # kwargs['Key'] = {cls.get_hash_key().attr_name: serialized_hash}
-        # if range_key:
-        #     serialized_range = serializer.serialize(range_key)
-        #     kwargs['Key'][cls.get_range_key().attr_name] = serialized_range
-        kwargs.update(cls.get_identifier_map(hash_key, range_key))
-        expr_names = {}
-        if condition:
-            expr, expr_names, expr_values = ConditionExpressionBuilder().build_expression(condition)
-
-            kwargs[CONDITION_EXPRESSION] = expr
-            kwargs[EXPRESSION_ATTRIBUTE_NAMES] = expr_names
-            kwargs[EXPRESSION_ATTRIBUTE_VALUES] = {
-                k: serializer.serialize(v) for k, v in expr_values.items()}
-        if attributes_to_get:
-            # flip expr names
-            expr_names = {v: k for k, v in expr_names.items()}
-            kwargs[PROJECTION_EXPRESSION] = create_projection_expression(
-                attributes_to_get, expr_names)
-            expr_names = {v: k for k, v in expr_names.items()}
-            kwargs[EXPRESSION_ATTRIBUTE_NAMES] = expr_names
-        return kwargs
 
     @classmethod
-    def get_identifier_map(cls, hash_key, range_key=None, key=KEY):
+    def get_operation_kwargs_from_class(
+        cls,
+        hash_key=None,
+        range_key=None,
+        condition=None,
+        attributes_to_get=None,
+        key_condition_expression=None,
+        range_key_condition=None,
+        filter_condition=None,
+        index_name=None,
+        scan_index_forward=None,
+        limit=None,
+        last_evaluated_key=None,
+        page_size=None,
+        consistent_read=None,
+        select=None,
+        serialize=False,
+        add_identifier_map=False
+    ) -> Dict[str, Any]:
+        kwargs: Dict[str, Any] = dict(
+            serialize=serialize,
+            add_identifier_map=add_identifier_map,
+            table_name=cls.Meta.table_name,
+            hash_key=hash_key,
+            range_key=range_key,
+            condition=condition,
+            attributes_to_get=attributes_to_get,
+            consistent_read=consistent_read,
+            key_condition_expression=key_condition_expression,
+            range_key_condition=range_key_condition,
+            filter_condition=filter_condition,
+            index_name=index_name,
+            scan_index_forward=scan_index_forward,
+            limit=limit,
+            last_evaluated_key=last_evaluated_key,
+            page_size=page_size,
+            select=select
+        )
+
+        return cls.get_operation_kwargs(**kwargs)
+
+    @classmethod
+    def get_identifier_map(cls, hash_key, range_key=None, key=KEY, serialize=True):
         serializer = dynamo_types.TypeSerializer()
-        serialized_hash = serializer.serialize(hash_key)
-        kwargs = {key: {cls.get_hash_key().attr_name: serialized_hash}}
+        hash_key = serializer.serialize(hash_key) if serialize else hash_key
+        kwargs = {key: {cls.get_hash_key().attr_name: hash_key}}
         if range_key:
-            serialized_range = serializer.serialize(range_key)
-            kwargs[key][cls.get_range_key().attr_name] = serialized_range
+            range_key = serializer.serialize(range_key) if serialize else range_key
+            kwargs[key][cls.get_range_key().attr_name] = range_key
         return kwargs
 
     @classmethod
@@ -960,8 +959,43 @@ class Model(metaclass=MetaModel):
         }
 
     @classmethod
+    def get_item_collection_map(cls, return_item_collection_metrics: str) -> Dict:
+        """
+        Builds the item collection map
+        """
+        if return_item_collection_metrics.upper() not in RETURN_ITEM_COLL_METRICS_VALUES:
+            raise ValueError("{} must be one of {}".format(RETURN_ITEM_COLL_METRICS, RETURN_ITEM_COLL_METRICS_VALUES))
+        return {
+            RETURN_ITEM_COLL_METRICS: str(return_item_collection_metrics).upper()
+        }
+
+    @classmethod
+    def get_return_values_map(cls, return_values: str) -> Dict:
+        """
+        Builds the return values map that is common to several operations
+        """
+        if return_values.upper() not in RETURN_VALUES_VALUES:
+            raise ValueError("{} must be one of {}".format(RETURN_VALUES, RETURN_VALUES_VALUES))
+        return {
+            RETURN_VALUES: str(return_values).upper()
+        }
+
+    @classmethod
+    def get_consumed_capacity_map(cls, return_consumed_capacity: str) -> Dict:
+        """
+        Builds the consumed capacity map that is common to several operations
+        """
+        if return_consumed_capacity.upper() not in RETURN_CONSUMED_CAPACITY_VALUES:
+            raise ValueError("{} must be one of {}".format(RETURN_ITEM_COLL_METRICS, RETURN_CONSUMED_CAPACITY_VALUES))
+        return {
+            RETURN_CONSUMED_CAPACITY: str(return_consumed_capacity).upper()
+        }
+
+    @classmethod
     def get_operation_kwargs(
         cls,
+        serialize: bool,
+        add_identifier_map: bool,
         table_name: str,
         hash_key: str,
         range_key: Optional[str] = None,
@@ -974,29 +1008,60 @@ class Model(metaclass=MetaModel):
         return_values: Optional[str] = None,
         return_consumed_capacity: Optional[str] = None,
         return_item_collection_metrics: Optional[str] = None,
-        return_values_on_condition_failure: Optional[str] = None
+        return_values_on_condition_failure: Optional[str] = None,
+        key_condition_expression = None,
+        range_key_condition = None,
+        filter_condition = None,
+        index_name = None,
+        scan_index_forward = None,
+        limit = None,
+        last_evaluated_key = None,
+        page_size = None,
+        select=None,
+        item=None
     ) -> Dict:
-
-        serializer = dynamo_types.TypeSerializer()
         operation_kwargs: Dict[str, Any] = {}
         name_placeholders: Dict[str, str] = {}
         expression_attribute_values: Dict[str, Any] = {}
-
         operation_kwargs[TABLE_NAME] = table_name
-        operation_kwargs.update(cls.get_identifier_map(hash_key, range_key, key=key))
+        if add_identifier_map:
+            operation_kwargs.update(cls.get_identifier_map(hash_key, range_key, key=key, serialize=serialize))
+        if item is not None:
+            operation_kwargs[ITEM] = item
         if attributes and operation_kwargs.get(ITEM) is not None:  # put
             serializer = dynamo_types.TypeSerializer()
-
-            attrs = {k: serializer.serialize(v) for k, v in attributes.items()}
+            attrs = {k: serializer.serialize(v) for k, v in attributes.items()} if serialize else attributes
             operation_kwargs[ITEM].update(attrs)
-        if attributes_to_get is not None:
-            projection_expression = create_projection_expression(
-                attributes_to_get, name_placeholders)
-            operation_kwargs[PROJECTION_EXPRESSION] = projection_expression
         if condition is not None:
             condition_expression, name_placeholders, expression_attribute_values = ConditionExpressionBuilder(
             ).build_expression(condition)
             operation_kwargs[CONDITION_EXPRESSION] = condition_expression
+        if key_condition_expression is not None:
+            operation_kwargs[KEY_CONDITION_EXPRESSION] = key_condition_expression
+        if range_key_condition is not None:
+            operation_kwargs[KEY_CONDITION_EXPRESSION] = operation_kwargs[KEY_CONDITION_EXPRESSION] & range_key_condition
+        if filter_condition is not None:
+            operation_kwargs[FILTER_EXPRESSION] = filter_condition
+        if consistent_read is not None:
+            operation_kwargs[CONSISTENT_READ] = consistent_read
+        if index_name is not None:
+            operation_kwargs[INDEX_NAME] = index_name.Meta.index_name
+        if scan_index_forward is not None:
+            operation_kwargs[SCAN_INDEX_FORWARD] = scan_index_forward
+        if limit is not None:
+            operation_kwargs[LIMIT] = limit
+        if last_evaluated_key is not None:
+            operation_kwargs[EXCLUSIVE_START_KEY] = last_evaluated_key
+        if attributes_to_get is not None:
+            name_placeholders = {v: k for k, v in name_placeholders.items()}
+            projection_expression = create_projection_expression(
+                attributes_to_get, name_placeholders)
+            operation_kwargs[PROJECTION_EXPRESSION] = projection_expression
+            name_placeholders = {v: k for k, v in name_placeholders.items()}
+        if select is not None:
+            operation_kwargs[SELECT] = select
+        if page_size is not None:
+            operation_kwargs[LIMIT] = page_size
         if consistent_read is not None:
             operation_kwargs[CONSISTENT_READ] = consistent_read
         if return_values is not None:
@@ -1021,9 +1086,9 @@ class Model(metaclass=MetaModel):
             operation_kwargs[EXPRESSION_ATTRIBUTE_NAMES] = name_placeholders
         if expression_attribute_values:
             serializer = dynamo_types.TypeSerializer()
-
             operation_kwargs[EXPRESSION_ATTRIBUTE_VALUES] = {
-                k: serializer.serialize(v) for k, v in expression_attribute_values.items()}
+                k: serializer.serialize(v) for k, v in expression_attribute_values.items()
+            } if serialize else expression_attribute_values
         return operation_kwargs
 
 
@@ -1115,7 +1180,7 @@ class TransactGet(Transaction):
         :return:
         '''
         operation_kwargs = model_cls.get_operation_kwargs_from_class(
-            hash_key, range_key=range_key, attributes_to_get=attributes_to_get)
+            hash_key, range_key=range_key, attributes_to_get=attributes_to_get, serialize=True, add_identifier_map=True)
         operation_kwargs = {TRANSACT_GET: operation_kwargs}
         model_future = _ModelFuture(model_cls)
         self._futures.append(model_future)
@@ -1163,19 +1228,23 @@ class TransactWrite(Transaction):
         operation_kwargs = model_cls.get_operation_kwargs_from_class(
             hash_key=hash_key,
             range_key=range_key,
-            condition=condition
+            condition=condition,
+            serialize=True,
+            add_identifier_map=True
         )
         self._condition_check_items.append({TRANSACT_CONDITION_CHECK: operation_kwargs})
 
     def delete(self, model, condition=None) -> None:
-        operation_kwargs = model.get_operation_kwargs_from_instance(condition=condition)
+        operation_kwargs = model.get_operation_kwargs_from_instance(condition=condition, serialize=True, add_identifier_map=True)
         self._delete_items.append({TRANSACT_DELETE: operation_kwargs})
 
     def save(self, model, condition=None, return_values: Optional[str] = None) -> None:
         operation_kwargs = model.get_operation_kwargs_from_instance(
             key=ITEM,
             condition=condition,
-            return_values_on_condition_failure=return_values
+            return_values_on_condition_failure=return_values,
+            serialize=True,
+            add_identifier_map = True
         )
         self._put_items.append({TRANSACT_PUT: operation_kwargs})
         # self._models_for_version_attribute_update.append(model)
@@ -1184,7 +1253,9 @@ class TransactWrite(Transaction):
         operation_kwargs = model.get_operation_kwargs_from_instance(
             actions=actions,
             condition=condition,
-            return_values_on_condition_failure=return_values
+            return_values_on_condition_failure=return_values,
+            serialize=True,
+            add_identifier_map=True
         )
         self._update_items.append({TRANSACT_UPDATE: operation_kwargs})
         # self._models_for_version_attribute_update.append(model)
@@ -1224,7 +1295,7 @@ class BatchWrite(ModelContextManager):
             if not self.auto_commit:
                 raise ValueError("DynamoDB allows a maximum of 25 batch operations")
             self.commit()
-        self.pending_operations.append({"Action": PUT, "Item": put_item})
+        self.pending_operations.append({ACTION: PUT, ITEM: put_item})
 
     def delete(self, del_item) -> None:
         '''
@@ -1243,7 +1314,7 @@ class BatchWrite(ModelContextManager):
             if not self.auto_commit:
                 raise ValueError("DynamoDB allows a maximum of 25 batch operations")
             self.commit()
-        self.pending_operations.append({"Action": DELETE, "Item": del_item})
+        self.pending_operations.append({ACTION: DELETE, ITEM: del_item})
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         '''
@@ -1260,10 +1331,10 @@ class BatchWrite(ModelContextManager):
         put_items = []
         delete_items = []
         for item in self.pending_operations:
-            if item['Action'] == PUT:
-                put_items.append(item['Item']._serialize()[ATTRIBUTES])
-            elif item['Action'] == DELETE:
-                delete_items.append(item['Item']._get_keys())
+            if item[ACTION] == PUT:
+                put_items.append(item[ITEM]._serialize()[ATTRIBUTES])
+            elif item[ACTION] == DELETE:
+                delete_items.append(item[ITEM]._get_keys())
         self.pending_operations = []
         if not delete_items and not put_items:
             return
