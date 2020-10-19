@@ -41,7 +41,7 @@ from falcano.constants import (
     TRANSACT_GET, TRANSACT_ITEMS, RETURN_CONSUMED_CAPACITY, PROJECTION_EXPRESSION, CONSISTENT_READ, KEY_CONDITION_EXPRESSION,
     FILTER_EXPRESSION, SELECT, ALL_PROJECTED_ATTRIBUTES, SCAN_INDEX_FORWARD, LIMIT, EXCLUSIVE_START_KEY,
     SPECIFIC_ATTRIBUTES, RETURN_ITEM_COLL_METRICS_VALUES, RETURN_ITEM_COLL_METRICS, RETURN_CONSUMED_CAPACITY_VALUES,
-    TABLE_KEY, TABLE_STATUS, ITEMS
+    TABLE_KEY, TABLE_STATUS, ITEMS, ACTION
 )
 
 logger = logging.getLogger('entity-base')  # pylint: disable=invalid-name
@@ -338,7 +338,7 @@ class Model(metaclass=MetaModel):
 
                 }
                 if isinstance(index, GlobalSecondaryIndex):
-                    if getattr(cls.Meta, 'billing_mode', None) != PAY_PER_REQUEST_BILLING_MODE:
+                    if getattr(cls.Meta, stringcase.snakecase(BILLING_MODE), None) != PAY_PER_REQUEST_BILLING_MODE:
                         idx[PROVISIONED_THROUGHPUT] = {
                             READ_CAPACITY_UNITS: index.Meta.read_capacity_units,
                             WRITE_CAPACITY_UNITS: index.Meta.write_capacity_units
@@ -459,7 +459,7 @@ class Model(metaclass=MetaModel):
         table = cls.resource().Table(cls.Meta.table_name)
         kwargs['add_identifier_map'] = True
         kwargs['serialize'] = False
-        kwargs['hash_key'] = hash_key
+        kwargs[stringcase.snakecase(HASH_KEY)] = hash_key
         if range_key is not None:
             kwargs['range_key'] = range_key
         kwargs = cls.get_operation_kwargs_from_class(**kwargs)
@@ -727,14 +727,6 @@ class Model(metaclass=MetaModel):
         '''
         return BatchWrite(cls, auto_commit=auto_commit)
 
-    # def delete(self, condition=None) -> Any:
-    #     kwargs = {}
-    #     table = self.resource().Table(self.Meta.table_name)
-    #     if condition:
-    #         kwargs['ConditionExpression'] = condition
-    #     kwargs['Key'] = self._get_keys()
-    #     return table.delete_item(**kwargs)
-
     def delete(self, condition=None) -> Any:
         kwargs = {'add_identifier_map': True, 'condition': condition}
         table = self.resource().Table(self.Meta.table_name)
@@ -749,15 +741,13 @@ class Model(metaclass=MetaModel):
             raise TypeError('the value of `actions` is expected to be a non-empty list')
 
         kwargs = {
-            'return_values': ALL_NEW,
+            stringcase.snakecase(RETURN_VALUES): ALL_NEW,
             'actions': actions,
             'add_identifier_map': True,
             'condition': condition
         }
 
         kwargs = self.get_operation_kwargs_from_instance(**kwargs)
-        # Get the key and put it in kwargs
-        #kwargs[KEY] = self._get_keys()
         table = self.resource().Table(self.Meta.table_name)
         res = table.update_item(**kwargs)[ATTRIBUTES]
         return Model._models[res[self.Meta.model_type]](**res)
@@ -870,8 +860,6 @@ class Model(metaclass=MetaModel):
         item=False
     ) -> Dict[str, Any]:
         is_update = actions is not None
-        is_delete = actions is None and not item
-
         save_kwargs = self._get_save_args(
                 item=item, attributes=True, null_check=not is_update)
 
@@ -1046,7 +1034,7 @@ class Model(metaclass=MetaModel):
             operation_kwargs[ITEM].update(attrs)
         if condition is not None:
             condition_expression, name_placeholders, expression_attribute_values = ConditionExpressionBuilder(
-            ).build_expression(condition) # TODO: handle non-serialized case?
+            ).build_expression(condition)
             operation_kwargs[CONDITION_EXPRESSION] = condition_expression
         if key_condition_expression is not None:
             operation_kwargs[KEY_CONDITION_EXPRESSION] = key_condition_expression
@@ -1092,7 +1080,7 @@ class Model(metaclass=MetaModel):
             operation_kwargs[UPDATE_EXPRESSION] = update_expression.serialize(
                 name_placeholders,
                 expression_attribute_values
-            ) # TODO: handle non-serialized case?
+            )
             name_placeholders = {v: k for k, v in name_placeholders.items()}
         if name_placeholders:
             operation_kwargs[EXPRESSION_ATTRIBUTE_NAMES] = name_placeholders
@@ -1307,7 +1295,7 @@ class BatchWrite(ModelContextManager):
             if not self.auto_commit:
                 raise ValueError("DynamoDB allows a maximum of 25 batch operations")
             self.commit()
-        self.pending_operations.append({"Action": PUT, "Item": put_item})
+        self.pending_operations.append({ACTION: PUT, ITEM: put_item})
 
     def delete(self, del_item) -> None:
         '''
@@ -1326,7 +1314,7 @@ class BatchWrite(ModelContextManager):
             if not self.auto_commit:
                 raise ValueError("DynamoDB allows a maximum of 25 batch operations")
             self.commit()
-        self.pending_operations.append({"Action": DELETE, "Item": del_item})
+        self.pending_operations.append({ACTION: DELETE, ITEM: del_item})
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         '''
@@ -1343,10 +1331,10 @@ class BatchWrite(ModelContextManager):
         put_items = []
         delete_items = []
         for item in self.pending_operations:
-            if item['Action'] == PUT:
-                put_items.append(item['Item']._serialize()[ATTRIBUTES])
-            elif item['Action'] == DELETE:
-                delete_items.append(item['Item']._get_keys())
+            if item[ACTION] == PUT:
+                put_items.append(item[ITEM]._serialize()[ATTRIBUTES])
+            elif item[ACTION] == DELETE:
+                delete_items.append(item[ITEM]._get_keys())
         self.pending_operations = []
         if not delete_items and not put_items:
             return
