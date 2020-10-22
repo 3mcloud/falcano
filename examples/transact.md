@@ -41,7 +41,7 @@ Now, lets create a couple of types, Person and Pet
 ```python
 class Person(BaseModel):
     '''
-    Hackathon Projects
+    Person Model
     PK: person#uuid
     SK: person#casedname
     '''
@@ -54,9 +54,9 @@ class Person(BaseModel):
 
 class Pet(BaseModel):
     '''
-    Hackathon Projects
-    PK: person#uuid
-    SK: person#casedname
+    Pet Model
+    PK: pet#uuid
+    SK: pet#casedname
     '''
     Type = UnicodeAttribute(default='pet')
     Name = UnicodeAttribute()
