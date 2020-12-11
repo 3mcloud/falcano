@@ -705,14 +705,14 @@ class Model(metaclass=MetaModel):
         '''
         Returns a TransactWrite
         '''
-        return TransactWrite(cls, connection=cls._connection)
+        return TransactWrite(cls, connection=cls.connection())
 
     @classmethod
     def transact_get(cls):
         '''
         Returns a TransactGet
         '''
-        return TransactGet(connection=cls._connection)
+        return TransactGet(connection=cls.connection())
 
     @classmethod
     def batch_write(cls, auto_commit: bool = True):
