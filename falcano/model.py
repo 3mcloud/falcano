@@ -26,7 +26,6 @@ from falcano.attributes import (
     MapAttribute,
     TTLAttribute,
 )
-from falcano.expressions.update import Update
 from falcano.expressions.projection import create_projection_expression
 
 from falcano.constants import (
@@ -41,7 +40,7 @@ from falcano.constants import (
     TRANSACT_GET, TRANSACT_ITEMS, RETURN_CONSUMED_CAPACITY, PROJECTION_EXPRESSION, CONSISTENT_READ, KEY_CONDITION_EXPRESSION,
     FILTER_EXPRESSION, SELECT, ALL_PROJECTED_ATTRIBUTES, SCAN_INDEX_FORWARD, LIMIT, EXCLUSIVE_START_KEY,
     SPECIFIC_ATTRIBUTES, RETURN_ITEM_COLL_METRICS_VALUES, RETURN_ITEM_COLL_METRICS, RETURN_CONSUMED_CAPACITY_VALUES,
-    TABLE_KEY, TABLE_STATUS, ITEMS, ACTION
+    TABLE_KEY, TABLE_STATUS, ITEMS, ACTION, NONE
 )
 
 logger = logging.getLogger('entity-base')  # pylint: disable=invalid-name
@@ -727,13 +726,17 @@ class Model(metaclass=MetaModel):
         '''
         return BatchWrite(cls, auto_commit=auto_commit)
 
-    def delete(self, condition=None) -> Any:
-        kwargs = {'add_identifier_map': True, 'condition': condition}
+    def delete(self, condition=None, return_values=None) -> Any:
+        kwargs = {
+            stringcase.snakecase(RETURN_VALUES): return_values if return_values is not None else NONE,
+            'add_identifier_map': True,
+            'condition': condition
+        }
         table = self.resource().Table(self.Meta.table_name)
         kwargs = self.get_operation_kwargs_from_instance(**kwargs)
         return table.delete_item(**kwargs)
 
-    def update(self, actions, condition=None):
+    def update(self, actions, condition=None, return_values=None):
         '''
         Updates an item using the UpdateItem operation.
         '''
@@ -741,7 +744,7 @@ class Model(metaclass=MetaModel):
             raise TypeError('the value of `actions` is expected to be a non-empty list')
 
         kwargs = {
-            stringcase.snakecase(RETURN_VALUES): ALL_NEW,
+            stringcase.snakecase(RETURN_VALUES): return_values if return_values is not None else ALL_NEW,
             'actions': actions,
             'add_identifier_map': True,
             'condition': condition
@@ -752,9 +755,13 @@ class Model(metaclass=MetaModel):
         res = table.update_item(**kwargs)[ATTRIBUTES]
         return Model._models[res[self.Meta.model_type]](**res)
 
-    def save(self, condition=None) -> Dict[str, Any]:
+    def save(self, condition=None, return_values=None) -> Dict[str, Any]:
         ''' Save a falcano model into dynamodb '''
-        kwargs = {'item': True, 'condition': condition}
+        kwargs = {
+            stringcase.snakecase(RETURN_VALUES): return_values if return_values is not None else NONE,
+            'item': True,
+            'condition': condition
+        }
         kwargs = self.get_operation_kwargs_from_instance(**kwargs)
         table = self.resource().Table(self.Meta.table_name)
         data = table.put_item(**kwargs)
