@@ -26,6 +26,7 @@ from falcano.attributes import (
     MapAttribute,
     TTLAttribute,
 )
+from falcano.expressions.update import Update
 from falcano.expressions.projection import create_projection_expression
 
 from falcano.constants import (

@@ -7,5 +7,7 @@ COPY README.md README.md
 
 FROM base as test
 RUN pip install .[dev]
+# Use the below pip install command instead of the above if you experience SSL certificate issues locally
+# RUN pip install --trusted-host pypi.python.org --trusted-host pypi.org --trusted-host files.pythonhosted.org .[dev]
 COPY . .
 CMD ["python", "-m", "pytest", "-s", "tests/unit/"]
