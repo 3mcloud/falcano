@@ -617,7 +617,11 @@ class Model(metaclass=MetaModel):
 
             if value is None:
                 continue
-            serialized = attr.serialize(value)
+
+            if isinstance(value, MapAttribute):
+                serialized = value.as_dict()
+            else:
+                serialized = attr.serialize(value)
             if serialized is None and not attr.null and null_check:
                 raise ValueError(f"Attribute '{attr.attr_name}' cannot be None")
 
