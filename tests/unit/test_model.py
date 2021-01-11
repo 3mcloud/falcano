@@ -97,6 +97,7 @@ def mock_client():
 
 @pytest.fixture
 def mock_environ():
+    os.environ['AWS_DEFAULT_REGION'] = 'us-east-1'
     os.environ['AWS_ACCESS_KEY_ID'] = 'testing'
     os.environ['AWS_SECRET_ACCESS_KEY'] = 'testing'
     os.environ['DYNAMODB_TABLE'] = 'c-132-table'
