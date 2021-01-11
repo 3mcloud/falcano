@@ -217,6 +217,18 @@ def test_get_schema():
 def test_create_table(mock_environ, mock_client):
     Person.connection = mock_client
     Person.create_table()
+    mock_client.create_table.assert_called_with(
+        AttributeDefinitions=[
+            {'AttributeName': 'PK', 'AttributeType': 'S'},
+            {'AttributeName': 'SK', 'AttributeType': 'S'},
+            {'AttributeName': 'Type', 'AttributeType': 'S'}],
+        KeySchema=[{'KeyType': 'HASH', 'AttributeName': 'PK'}, {'KeyType': 'RANGE', 'AttributeName': 'SK'}],
+        TableName='c-132-table',
+        BillingMode='PAY_PER_REQUEST',
+        GlobalSecondaryIndexes=[
+            {'IndexName': 'Type', 'KeySchema': [{'AttributeName': 'Type', 'KeyType': 'HASH'}, {'AttributeName': 'SK', 'KeyType': 'RANGE'}], 'Projection': {'ProjectionType': 'ALL'}}
+        ]
+    )
 
 
 def test_scan(mock_table_resource):
