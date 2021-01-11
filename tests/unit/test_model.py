@@ -214,8 +214,9 @@ def test_get_schema():
     assert schema['BillingMode'] == 'PAY_PER_REQUEST'
 
 
-def test_create_table(mock_environ):
-    BaseModel.create_table()
+def test_create_table(mock_environ, mock_client):
+    Person.connection = mock_client
+    Person.create_table()
 
 
 def test_scan(mock_table_resource):
