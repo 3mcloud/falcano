@@ -8,6 +8,7 @@ services:
     ports:
       - 5678:5678
     environment:
+      DYNAMODB_TABLE: unit-test-table
       ENDPOINT_URL: http://dynamodb-local:8000/
       AWS_DEFAULT_REGION: us-east-1
     volumes:

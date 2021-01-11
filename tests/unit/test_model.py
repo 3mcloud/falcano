@@ -23,7 +23,7 @@ class BaseModel(Model):
     '''Base model with meta'''
     class Meta(Model.Meta):
         ''' Table properties '''
-        table_name = 'c-132-table'
+        table_name = os.environ.get('DYNAMODB_TABLE')
     PK = UnicodeAttribute(hash_key=True)
     SK = UnicodeAttribute(range_key=True)
     TypeIndex = TypeIndex()
@@ -95,63 +95,46 @@ def mock_client():
     return mock_client
 
 
-@pytest.fixture
-def mock_environ():
-    os.environ['AWS_DEFAULT_REGION'] = 'us-east-1'
-    os.environ['AWS_ACCESS_KEY_ID'] = 'testing'
-    os.environ['AWS_SECRET_ACCESS_KEY'] = 'testing'
-    os.environ['AWS_SECURITY_TOKEN'] = 'testing'
-    os.environ['AWS_SESSION_TOKEN'] = 'testing'
-    os.environ['DYNAMODB_TABLE'] = 'c-132-table'
-
-
 def test_set_defaults():
     bird_person._set_defaults()
     bird_person_dict = bird_person.to_dict()
-    assert bird_person_dict['Type'] == 'person'
-    assert bird_person_dict['FirstName'] == 'Bird'
-    assert bird_person_dict['LastName'] == 'Person'
-    assert bird_person_dict['Age'] == 0
-    assert bird_person_dict['PK'] == 'person#7777'
-    assert bird_person_dict['SK'] == 'person#birdperson'
-    assert bird_person_dict['ID'] == '7777'
+    assert bird_person_dict == {
+        'Age': 0,
+        'Type': 'person',
+        'FirstName': 'Bird',
+        'LastName': 'Person',
+        'PK': 'person#7777',
+        'SK': 'person#birdperson',
+        'ID': '7777'
+    }
 
 
 def test_initialize_attributes():
     bird_person.initialize_attributes(True)
     bird_person_dict = bird_person.to_dict()
-    assert bird_person_dict['Type'] == 'person'
-    assert bird_person_dict['FirstName'] == 'Bird'
-    assert bird_person_dict['LastName'] == 'Person'
-    assert bird_person_dict['Age'] == 0
-    assert bird_person_dict['PK'] == 'person#7777'
-    assert bird_person_dict['SK'] == 'person#birdperson'
-    assert bird_person_dict['ID'] == '7777'
+    assert bird_person_dict == {
+        'Age': 0,
+        'Type': 'person',
+        'FirstName': 'Bird',
+        'LastName': 'Person',
+        'PK': 'person#7777',
+        'SK': 'person#birdperson',
+        'ID': '7777'
+    }
 
 
 def test_get_attributes():
     attributes = Person.get_attributes()
+    att_types = {
+        UnicodeAttribute: ['PK', 'SK', 'FirstName', 'LastName', 'Type'],
+        NumberAttribute: ['Age'],
+        UTCDateTimeAttribute: ['CreateDate'],
+        MapAttribute: ['ValueMap'],
+        ListAttribute: ['ValueList']
+    }
     assert len(attributes) == 9
     for att in attributes:
-        assert att[0] in ['PK', 'SK', 'FirstName', 'LastName', 'Age', 'Type', 'CreateDate', 'ValueList', 'ValueMap']
-        if att[0] == 'PK':
-            assert isinstance(att[1], UnicodeAttribute)
-        if att[0] == 'SK':
-            assert isinstance(att[1], UnicodeAttribute)
-        if att[0] == 'FirstName':
-            assert isinstance(att[1], UnicodeAttribute)
-        if att[0] == 'LastName':
-            assert isinstance(att[1], UnicodeAttribute)
-        if att[0] == 'Age':
-            assert isinstance(att[1], NumberAttribute)
-        if att[0] == 'Type':
-            assert isinstance(att[1], UnicodeAttribute)
-        if att[0] == 'CreateDate':
-            assert isinstance(att[1], UTCDateTimeAttribute)
-        if att[0] == 'ValueList':
-            assert isinstance(att[1], ListAttribute)
-        if att[0] == 'ValueMap':
-            assert isinstance(att[1], MapAttribute)
+        assert att[0] in att_types[type(att[1])]
 
 
 def test_get_attribute():
@@ -210,11 +193,11 @@ def test_get_schema():
             assert key['KeyType'] == 'RANGE'
         else:
             assert key['KeyType'] == 'HASH'
-    assert schema['TableName'] == 'c-132-table'
+    assert schema['TableName'] == 'unit-test-table'
     assert schema['BillingMode'] == 'PAY_PER_REQUEST'
 
 
-def test_create_table(mock_environ, mock_client):
+def test_create_table(mock_client):
     Person.connection = mock_client
     Person.create_table()
     mock_client.create_table.assert_called_with(
@@ -223,7 +206,7 @@ def test_create_table(mock_environ, mock_client):
             {'AttributeName': 'SK', 'AttributeType': 'S'},
             {'AttributeName': 'Type', 'AttributeType': 'S'}],
         KeySchema=[{'KeyType': 'HASH', 'AttributeName': 'PK'}, {'KeyType': 'RANGE', 'AttributeName': 'SK'}],
-        TableName='c-132-table',
+        TableName='unit-test-table',
         BillingMode='PAY_PER_REQUEST',
         GlobalSecondaryIndexes=[
             {'IndexName': 'Type', 'KeySchema': [{'AttributeName': 'Type', 'KeyType': 'HASH'}, {'AttributeName': 'SK', 'KeyType': 'RANGE'}], 'Projection': {'ProjectionType': 'ALL'}}
@@ -239,7 +222,7 @@ def test_scan(mock_table_resource):
     }
     Person.scan()
     mock_table.scan.assert_called_with(
-        TableName='c-132-table'
+        TableName='unit-test-table'
     )
     Person.scan(
         select='ALL_ATTRIBUTES',
@@ -248,10 +231,10 @@ def test_scan(mock_table_resource):
         consistent_read=True,
         condition=Person.FirstName.eq('Morty'),
         filter_condition=Person.SK.startswith('person')
-        )
+    )
 
     mock_table.scan.assert_called_with(
-        TableName='c-132-table',
+        TableName='unit-test-table',
         ConditionExpression='#n0 = :v0',
         FilterExpression=Person.SK.startswith('person'),
         ConsistentRead=True,
@@ -276,7 +259,7 @@ def test_get(mock_table_resource):
     }
     Person.get(hash_key="person#9999", range_key="person#summersmith")
     mock_table.get_item.assert_called_with(
-        TableName='c-132-table',
+        TableName='unit-test-table',
         Key={'PK': 'person#9999', 'SK': 'person#summersmith'}
     )
 
@@ -287,7 +270,7 @@ def test_get(mock_table_resource):
         consistent_read=True
     )
     mock_table.get_item.assert_called_with(
-        TableName='c-132-table',
+        TableName='unit-test-table',
         Key={'PK': 'person#9999', 'SK': 'person#summersmith'},
         ConsistentRead=True,
         ProjectionExpression='#0, #1',
@@ -299,7 +282,7 @@ def test_batch_get(mock_table_resource):
     Person.resource = mock_resource
     mock_resource.batch_get_item.return_value = {
         'Responses': {
-            'c-132-table': [
+            'unit-test-table': [
                 {
                     'Age': 71,
                     'FirstName': 'Rick',
@@ -319,7 +302,7 @@ def test_batch_get(mock_table_resource):
             ]
         },
         'UnprocessedKeys': {
-            'c-132-table': {
+            'unit-test-table': {
 
             }
         }
@@ -332,7 +315,7 @@ def test_batch_get(mock_table_resource):
     Person.batch_get(items)
     mock_resource.batch_get_item.assert_called_with(
         RequestItems={
-            'c-132-table': {
+            'unit-test-table': {
                 'Keys': [
                     {'PK': 'person#5678', 'SK': 'person#mortysmith'},
                     {'PK': 'person#1234', 'SK': 'person#ricksanchez'}
@@ -348,7 +331,7 @@ def test_batch_get(mock_table_resource):
 
     Person.batch_get(items=items, ConsistentRead=True, AttributesToGet=['FirstName', 'LastName'])
     mock_resource.batch_get_item.assert_called_with(
-        RequestItems={'c-132-table': {'ConsistentRead': True, 'AttributesToGet': ['FirstName', 'LastName'], 'Keys': [{'PK': 'person#9999', 'SK': 'person#summersmith'}, {'PK': 'person#8888', 'SK': 'person#jerrysmith'}]}}
+        RequestItems={'unit-test-table': {'ConsistentRead': True, 'AttributesToGet': ['FirstName', 'LastName'], 'Keys': [{'PK': 'person#9999', 'SK': 'person#summersmith'}, {'PK': 'person#8888', 'SK': 'person#jerrysmith'}]}}
     )
 
 
@@ -357,7 +340,7 @@ def test_batch_get_page(mock_table_resource):
     Person.resource = mock_resource
     mock_resource.batch_get_item.return_value = {
         'Responses': {
-            'c-132-table': [
+            'unit-test-table': [
                 {
                     'Age': 71,
                     'FirstName': 'Rick',
@@ -377,7 +360,7 @@ def test_batch_get_page(mock_table_resource):
             ]
         },
         'UnprocessedKeys': {
-            'c-132-table': {
+            'unit-test-table': {
 
             }
         }
@@ -387,7 +370,7 @@ def test_batch_get_page(mock_table_resource):
     Person._batch_get_page(keys_to_get)
     mock_resource.batch_get_item.assert_called_with(
         RequestItems={
-            'c-132-table': {
+            'unit-test-table': {
                 'Keys': [
                     {'PK': 'person#5678', 'SK': 'person#mortysmith'},
                     {'PK': 'person#1234', 'SK': 'person#ricksanchez'}
@@ -401,7 +384,7 @@ def test_exists(mock_client):
     Person.connection = mock_client
     mock_client.describe_table.retuen_value = {
         'Table': {
-            'TableName': 'c-132-table'
+            'TableName': 'unit-test-table'
         }
     }
     assert Person.exists()
@@ -424,7 +407,7 @@ def test_query(mock_table_resource):
     }
     Person.query(rick.PK)
     mock_table.query.assert_called_with(
-        TableName='c-132-table', KeyConditionExpression=Person.get_hash_key().eq(rick.PK), ConsistentRead=False
+        TableName='unit-test-table', KeyConditionExpression=Person.get_hash_key().eq(rick.PK), ConsistentRead=False
     )
 
     Person.query(
@@ -437,7 +420,7 @@ def test_query(mock_table_resource):
         page_size=20
     )
     mock_table.query.assert_called_with(
-        TableName='c-132-table', KeyConditionExpression=Person.get_hash_key().eq(morty.PK) & Person.SK.startswith("person"),
+        TableName='unit-test-table', KeyConditionExpression=Person.get_hash_key().eq(morty.PK) & Person.SK.startswith("person"),
         FilterExpression=Person.LastName.eq("Smith"), ConsistentRead=True, Limit=20, ProjectionExpression='#0, #1',
         Select='SPECIFIC_ATTRIBUTES', ExpressionAttributeNames={'#0': 'FirstName', '#1': 'LastName'}
     )
@@ -505,7 +488,7 @@ def test_transact_write(mock_client):
         TransactItems=[
             {
                 'Delete': {
-                    'TableName': 'c-132-table',
+                    'TableName': 'unit-test-table',
                     'Key': {
                         'PK': {'S': 'person#9999'},
                         'SK': {'S': 'person#summersmith'}
@@ -514,7 +497,7 @@ def test_transact_write(mock_client):
             },
             {
                 'Delete': {
-                    'TableName': 'c-132-table',
+                    'TableName': 'unit-test-table',
                     'Key': {
                         'PK': {'S': 'person#7777'},
                         'SK': {'S': 'person#birdperson'}
@@ -523,7 +506,7 @@ def test_transact_write(mock_client):
             },
             {
                'Put': {
-                    'TableName': 'c-132-table',
+                    'TableName': 'unit-test-table',
                     'Item': {
                         'PK': {'S': 'person#1234'},
                         'SK': {'S': 'person#ricksanchez'},
@@ -536,7 +519,7 @@ def test_transact_write(mock_client):
             },
             {
                'Put': {
-                    'TableName': 'c-132-table',
+                    'TableName': 'unit-test-table',
                     'Item': {
                         'PK': {'S': 'person#5678'},
                         'SK': {'S': 'person#mortysmith'},
@@ -584,7 +567,7 @@ def test_transact_get(mock_client):
         TransactItems=[
             {
                 'Get': {
-                    'TableName': 'c-132-table',
+                    'TableName': 'unit-test-table',
                     'Key': {
                         'PK': {'S': 'person#1234'},
                         'SK': {'S': 'person#ricksanchez'}
@@ -593,7 +576,7 @@ def test_transact_get(mock_client):
             },
             {
                 'Get': {
-                    'TableName': 'c-132-table',
+                    'TableName': 'unit-test-table',
                     'Key': {
                         'PK': {'S': 'person#5678'},
                         'SK': {'S': 'person#mortysmith'}
@@ -674,7 +657,7 @@ def test_save(mock_table_resource):
 
     rick.save()
     mock_table.put_item.assert_called_with(
-        TableName='c-132-table',
+        TableName='unit-test-table',
         Item={
             'Age': 70,
             'FirstName': 'Rick',
@@ -687,7 +670,7 @@ def test_save(mock_table_resource):
 
     morty.save(condition=Person.FirstName.eq("Morty"))
     mock_table.put_item.assert_called_with(
-        TableName='c-132-table',
+        TableName='unit-test-table',
         Item={
             'Age': 14,
             'FirstName': 'Morty',
@@ -704,7 +687,7 @@ def test_save(mock_table_resource):
 
     summer.save(return_values='UPDATED_NEW')
     mock_table.put_item.assert_called_with(
-        TableName='c-132-table',
+        TableName='unit-test-table',
         Item={
             'Age': 18,
             'FirstName': 'Summer',
@@ -718,7 +701,7 @@ def test_save(mock_table_resource):
 
     jerry.save(return_values='ALL_NEW', condition=Person.Age.eq(35))
     mock_table.put_item.assert_called_with(
-        TableName='c-132-table',
+        TableName='unit-test-table',
         Item={
             'Age': 35,
             'FirstName': 'Jerry',
@@ -750,7 +733,7 @@ def test_update(mock_table_resource):
     }
     rick.update(actions=[Person.Age.set(Person.Age + 1)])
     mock_table.update_item.assert_called_with(
-        TableName='c-132-table',
+        TableName='unit-test-table',
         Key={'PK': 'person#1234', 'SK': 'person#ricksanchez'},
         ReturnValues='ALL_NEW',
         UpdateExpression='SET #0 = #0 + :0',
@@ -773,7 +756,7 @@ def test_update(mock_table_resource):
         condition=Person.FirstName.eq("Morty")
     )
     mock_table.update_item.assert_called_with(
-        TableName='c-132-table',
+        TableName='unit-test-table',
         Key={'PK': 'person#5678', 'SK': 'person#mortysmith'},
         ConditionExpression='#n0 = :v0',
         ReturnValues='ALL_NEW',
@@ -797,7 +780,7 @@ def test_update(mock_table_resource):
         return_values='UPDATED_NEW'
     )
     mock_table.update_item.assert_called_with(
-        TableName='c-132-table',
+        TableName='unit-test-table',
         Key={'PK': 'person#9999', 'SK': 'person#summersmith'},
         ReturnValues='UPDATED_NEW',
         UpdateExpression='SET #0 = :0',
@@ -821,7 +804,7 @@ def test_update(mock_table_resource):
         condition=Person.FirstName.eq('Jerry') & Person.SK.startswith('person')
     )
     mock_table.update_item.assert_called_with(
-        TableName='c-132-table',
+        TableName='unit-test-table',
         Key={'PK': 'person#8888', 'SK': 'person#jerrysmith'},
         ConditionExpression='(#n0 = :v0 AND begins_with(#n1, :v1))',
         ReturnValues='ALL_NEW', UpdateExpression='SET #n0 = :2',
@@ -836,12 +819,12 @@ def test_delete(mock_table_resource):
 
     rick.delete()
     mock_table.delete_item.assert_called_with(
-        TableName='c-132-table', Key={'PK': 'person#1234', 'SK': 'person#ricksanchez'}, ReturnValues='NONE'
+        TableName='unit-test-table', Key={'PK': 'person#1234', 'SK': 'person#ricksanchez'}, ReturnValues='NONE'
     )
 
     morty.delete(condition=Person.FirstName.eq("Morty"))
     mock_table.delete_item.assert_called_with(
-        TableName='c-132-table',
+        TableName='unit-test-table',
         Key={'PK': 'person#5678', 'SK': 'person#mortysmith'},
         ReturnValues='NONE',
         ConditionExpression='#n0 = :v0',
@@ -851,14 +834,14 @@ def test_delete(mock_table_resource):
 
     summer.delete(return_values='UPDATED_NEW')
     mock_table.delete_item.assert_called_with(
-        TableName='c-132-table',
+        TableName='unit-test-table',
         Key={'PK': 'person#9999', 'SK': 'person#summersmith'},
         ReturnValues='UPDATED_NEW',
     )
 
     jerry.delete(return_values='ALL_NEW', condition=Person.Age.eq(35))
     mock_table.delete_item.assert_called_with(
-        TableName='c-132-table',
+        TableName='unit-test-table',
         Key={'PK': 'person#8888', 'SK': 'person#jerrysmith'},
         ConditionExpression='#n0 = :v0',
         ReturnValues='ALL_NEW',
@@ -902,7 +885,7 @@ def test_get_save_args():
 
 def test_get_operation_kwargs_from_instance():
     kwargs = rick.get_operation_kwargs_from_instance()
-    assert kwargs == {'TableName': 'c-132-table'}
+    assert kwargs == {'TableName': 'unit-test-table'}
     kwargs = rick.get_operation_kwargs_from_instance(
         actions=[Person.FirstName.set('Kalvin'), Person.LastName.set('Tronkenmueller')],
         condition=Person.FirstName.eq("Rick"),
@@ -912,13 +895,13 @@ def test_get_operation_kwargs_from_instance():
         add_identifier_map=True,
         item=True
     )
-    assert kwargs == {'TableName': 'c-132-table', 'Key': {'PK': {'S': 'person#1234'}, 'SK': {'S': 'person#ricksanchez'}}, 'ConditionExpression': '#n0 = :v0', 'ReturnValues': 'UPDATED_NEW', 'ReturnValuesOnConditionCheckFailure': 'ALL_OLD', 'UpdateExpression': 'SET #n0 = :1, #1 = :2', 'ExpressionAttributeNames': {'#n0': 'FirstName', '#1': 'LastName'}, 'ExpressionAttributeValues': {':v0': {'S': 'Rick'}, ':1': {'S': 'Kalvin'}, ':2': {'S': 'Tronkenmueller'}}}
+    assert kwargs == {'TableName': 'unit-test-table', 'Key': {'PK': {'S': 'person#1234'}, 'SK': {'S': 'person#ricksanchez'}}, 'ConditionExpression': '#n0 = :v0', 'ReturnValues': 'UPDATED_NEW', 'ReturnValuesOnConditionCheckFailure': 'ALL_OLD', 'UpdateExpression': 'SET #n0 = :1, #1 = :2', 'ExpressionAttributeNames': {'#n0': 'FirstName', '#1': 'LastName'}, 'ExpressionAttributeValues': {':v0': {'S': 'Rick'}, ':1': {'S': 'Kalvin'}, ':2': {'S': 'Tronkenmueller'}}}
 
 
 def test_get_operation_kwargs_from_class():
     kwargs = Person.get_operation_kwargs_from_class()
 
-    assert kwargs == {'TableName': 'c-132-table'}
+    assert kwargs == {'TableName': 'unit-test-table'}
     kwargs = Person.get_operation_kwargs_from_class(
         condition=Person.FirstName.eq("Rick"),
         filter_condition=Person.LastName.eq("Sanchez"),
@@ -928,7 +911,7 @@ def test_get_operation_kwargs_from_class():
         scan_index_forward=True,
         limit=200,
     )
-    assert kwargs == {'TableName': 'c-132-table', 'ConditionExpression': '#n0 = :v0', 'FilterExpression': Person.LastName.eq("Sanchez"), 'ConsistentRead': True, 'ScanIndexForward': True, 'Limit': 200, 'ProjectionExpression': '#n0, #1', 'Select': 'ALL_ATTRIBUTES', 'ExpressionAttributeNames': {'#n0': 'FirstName', '#1': 'LastName'}, 'ExpressionAttributeValues': {':v0': 'Rick'}}
+    assert kwargs == {'TableName': 'unit-test-table', 'ConditionExpression': '#n0 = :v0', 'FilterExpression': Person.LastName.eq("Sanchez"), 'ConsistentRead': True, 'ScanIndexForward': True, 'Limit': 200, 'ProjectionExpression': '#n0, #1', 'Select': 'ALL_ATTRIBUTES', 'ExpressionAttributeNames': {'#n0': 'FirstName', '#1': 'LastName'}, 'ExpressionAttributeValues': {':v0': 'Rick'}}
 
 
 def test_get_identifier_map():
