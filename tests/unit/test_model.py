@@ -229,14 +229,22 @@ def test_scan(mock_table_resource):
         select='ALL_ATTRIBUTES',
         limit=200,
         attributes_to_get=['FirstName', 'LastName'],
-        consistent_read=True)
+        consistent_read=True,
+        condition=Person.FirstName.eq('Morty'),
+        filter_condition=Person.SK.startswith('person')
+        )
+
     mock_table.scan.assert_called_with(
         TableName='c-132-table',
+        ConditionExpression='#n0 = :v0',
+        FilterExpression=Person.SK.startswith('person'),
         ConsistentRead=True,
         Limit=200,
-        ProjectionExpression='#0, #1',
+        ProjectionExpression='#n0, #1',
         Select='ALL_ATTRIBUTES',
-        ExpressionAttributeNames={'#0': 'FirstName', '#1': 'LastName'})
+        ExpressionAttributeNames={'#n0': 'FirstName', '#1': 'LastName'},
+        ExpressionAttributeValues={':v0': 'Morty'}
+    )
 
 
 def test_get(mock_table_resource):
@@ -405,6 +413,7 @@ def test_query(mock_table_resource):
 
     Person.query(
         morty.PK,
+        range_key_condition=Person.SK.startswith("person"),
         filter_condition=Person.LastName.eq("Smith"),
         consistent_read=True,
         limit=1,
@@ -412,8 +421,11 @@ def test_query(mock_table_resource):
         page_size=20
     )
     mock_table.query.assert_called_with(
-        TableName='c-132-table', KeyConditionExpression=Person.get_hash_key().eq(morty.PK), FilterExpression=Person.LastName.eq("Smith"), ConsistentRead=True, Limit=20, ProjectionExpression='#0, #1', Select='SPECIFIC_ATTRIBUTES', ExpressionAttributeNames={'#0': 'FirstName', '#1': 'LastName'}
+        TableName='c-132-table', KeyConditionExpression=Person.get_hash_key().eq(morty.PK) & Person.SK.startswith("person"),
+        FilterExpression=Person.LastName.eq("Smith"), ConsistentRead=True, Limit=20, ProjectionExpression='#0, #1',
+        Select='SPECIFIC_ATTRIBUTES', ExpressionAttributeNames={'#0': 'FirstName', '#1': 'LastName'}
     )
+
 
 
 def test_serialize():
@@ -790,16 +802,15 @@ def test_update(mock_table_resource):
     jerry.update(
         actions=[Person.FirstName.set('Doofus')],
         return_values='ALL_NEW',
-        condition=Person.FirstName.eq('Jerry')
+        condition=Person.FirstName.eq('Jerry') & Person.SK.startswith('person')
     )
     mock_table.update_item.assert_called_with(
         TableName='c-132-table',
         Key={'PK': 'person#8888', 'SK': 'person#jerrysmith'},
-        ConditionExpression='#n0 = :v0',
-        ReturnValues='ALL_NEW',
-        UpdateExpression='SET #n0 = :1',
-        ExpressionAttributeNames={'#n0': 'FirstName'},
-        ExpressionAttributeValues={':v0': 'Jerry', ':1': 'Doofus'}
+        ConditionExpression='(#n0 = :v0 AND begins_with(#n1, :v1))',
+        ReturnValues='ALL_NEW', UpdateExpression='SET #n0 = :2',
+        ExpressionAttributeNames={'#n0': 'FirstName', '#n1': 'SK'},
+        ExpressionAttributeValues={':v0': 'Jerry', ':v1': 'person', ':2': 'Doofus'}
     )
 
 
