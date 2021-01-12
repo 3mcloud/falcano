@@ -1,9 +1,12 @@
+# pylint: disable=unsubscriptable-object
+'''
+Falcano operands
+'''
 from typing import Any, Dict, List, Optional, Union
-from typing import TYPE_CHECKING
 
 from falcano.constants import (
-    ATTR_TYPE_MAP, BINARY_SET, LIST, LIST_SHORT, MAP, MAP_SHORT,
-    NUMBER_SET, NUMBER_SHORT, SHORT_ATTR_TYPES, STRING_SET, STRING_SHORT
+    ATTR_TYPE_MAP, LIST, LIST_SHORT, MAP, MAP_SHORT,
+    NUMBER_SHORT, SHORT_ATTR_TYPES
 )
 from falcano.expressions.update import (
     AddAction, DeleteAction, RemoveAction, SetAction, ListRemoveAction
@@ -26,7 +29,11 @@ class _Operand:
     def __repr__(self) -> str:
         return self.format_string.format(*self.values)
 
-    def serialize(self, placeholder_names: Dict[str, str], expression_attribute_values: Dict[str, str]) -> str:
+    def serialize(self,
+                  placeholder_names: Dict[str, str],
+                  expression_attribute_values: Dict[str, str]
+                  ) -> str:
+        ''' Serializes values '''
         values = [self._serialize_value(value, placeholder_names,
                                         expression_attribute_values) for value in self.values]
         return self.format_string.format(*values)
@@ -38,7 +45,7 @@ class _Operand:
         if isinstance(value, _Operand):
             return value
         # prevent circular import -- Attribute imports Path
-        from falcano.attributes import Attribute, MapAttribute
+        from falcano.attributes import Attribute, MapAttribute # pylint: disable=import-outside-toplevel
         if isinstance(value, MapAttribute) and value._is_attribute_container():
             return self._to_value(value)
         return Path(value) if isinstance(value, Attribute) else self._to_value(value)
@@ -53,7 +60,8 @@ class _Operand:
 
 class _NumericOperand(_Operand):
     """
-    A base class for Operands that can be used in the increment and decrement SET update actions.
+    A base class for Operands that can be used in the
+    increment and decrement SET update actions.
     """
 
     def __add__(self, other):
@@ -71,17 +79,20 @@ class _NumericOperand(_Operand):
 
 class _ListAppendOperand(_Operand):
     """
-    A base class for Operands that can be used in the list_append function for the SET update action.
+    A base class for Operands that can be used in the
+    list_append function for the SET update action.
     """
 
     def append(self, other: Any) -> 'ListAppend':
+        '''List append'''
         return ListAppend(self, self._to_operand(other))
 
     def prepend(self, other: Any) -> 'ListAppend':
+        '''List prepend'''
         return ListAppend(self._to_operand(other), self)
 
 
-class Increment(_Operand):
+class Increment(_Operand):  # pylint: disable=too-few-public-methods
     """
     Increment is a special operand that represents an increment SET update action.
     """
@@ -91,10 +102,10 @@ class Increment(_Operand):
     def __init__(self, lhs: '_Operand', rhs: '_Operand') -> None:
         lhs._type_check(NUMBER_SHORT)
         rhs._type_check(NUMBER_SHORT)
-        super(Increment, self).__init__(lhs, rhs)
+        super().__init__(lhs, rhs)
 
 
-class Decrement(_Operand):
+class Decrement(_Operand): # pylint: disable=too-few-public-methods
     """
     Decrement is a special operand that represents an decrement SET update action.
     """
@@ -104,12 +115,13 @@ class Decrement(_Operand):
     def __init__(self, lhs: _Operand, rhs: _Operand) -> None:
         lhs._type_check(NUMBER_SHORT)
         rhs._type_check(NUMBER_SHORT)
-        super(Decrement, self).__init__(lhs, rhs)
+        super().__init__(lhs, rhs)
 
 
-class ListAppend(_Operand):
+class ListAppend(_Operand): # pylint: disable=too-few-public-methods
     """
-    ListAppend is a special operand that represents the list_append function for the SET update action.
+    ListAppend is a special operand that represents the
+    list_append function for the SET update action.
     """
     format_string = 'list_append ({0}, {1})'
     short_attr_type = LIST_SHORT
@@ -117,12 +129,13 @@ class ListAppend(_Operand):
     def __init__(self, list1: _Operand, list2: _Operand):
         list1._type_check(LIST_SHORT)
         list2._type_check(LIST_SHORT)
-        super(ListAppend, self).__init__(list1, list2)
+        super().__init__(list1, list2)
 
 
 class IfNotExists(_NumericOperand, _ListAppendOperand):
     """
-    IfNotExists is a special operand that represents the if_not_exists function for the SET update action.
+    IfNotExists is a special operand that represents the
+    if_not_exists function for the SET update action.
     """
     format_string = 'if_not_exists ({0}, {1})'
 
@@ -131,7 +144,7 @@ class IfNotExists(_NumericOperand, _ListAppendOperand):
         if self.short_attr_type != value.short_attr_type:
             # path and value have conflicting types -- defer any type checks to DynamoDB
             self.short_attr_type = None
-        super(IfNotExists, self).__init__(path, value)
+        super().__init__(path, value)
 
 
 class Value(_NumericOperand, _ListAppendOperand):
@@ -142,7 +155,7 @@ class Value(_NumericOperand, _ListAppendOperand):
 
     def __init__(self, value: Any, attribute: Optional['Attribute'] = None) -> None:
         # Check to see if value is already serialized
-        if isinstance(value, dict) and len(value) == 1 and list(value.keys())[0] in SHORT_ATTR_TYPES:
+        if isinstance(value, dict) and len(value) == 1 and list(value.keys())[0] in SHORT_ATTR_TYPES: # pylint: disable=line-too-long
             (self.short_attr_type, value), = value.items()
         elif value is None:
             (self.short_attr_type, value) = Value.__serialize(value)
@@ -150,10 +163,11 @@ class Value(_NumericOperand, _ListAppendOperand):
             (self.short_attr_type, value) = Value.__serialize(value, attribute)
         # if isinstance(value, set):  # self.short_attr_type in [STRING_SET, MAP_SHORT]:
         #     super(Value, self).__init__({self.short_attr_type: value})
-        super(Value, self).__init__(value)
+        super().__init__(value)
 
     @property
     def value(self):
+        '''Get the value'''
         return self.values[0]
 
     def _serialize_value(self, value, placeholder_names, expression_attribute_values):
@@ -174,7 +188,7 @@ class Value(_NumericOperand, _ListAppendOperand):
 
     @staticmethod
     def __serialize_based_on_type(value):
-        from falcano.attributes import _get_class_for_serialize
+        from falcano.attributes import _get_class_for_serialize  # pylint: disable=import-outside-toplevel
         attr_class = _get_class_for_serialize(value)
         return ATTR_TYPE_MAP[attr_class.attr_type], attr_class.serialize(value)
 
@@ -186,7 +200,8 @@ class Path(_NumericOperand, _ListAppendOperand):
     format_string = '{0}'
 
     def __init__(self, attribute_or_path: _PathOrAttribute) -> None:
-        from falcano.attributes import Attribute  # prevent circular import -- Attribute imports Path
+        # prevent circular import -- Attribute imports Path
+        from falcano.attributes import Attribute  # pylint: disable=import-outside-toplevel
         path: _PathOrAttribute
         if isinstance(attribute_or_path, Attribute):
             self.attribute = attribute_or_path
@@ -198,10 +213,11 @@ class Path(_NumericOperand, _ListAppendOperand):
             path = attribute_or_path
         if not path:
             raise ValueError("path cannot be empty")
-        super(Path, self).__init__(get_path_segments(path))
+        super().__init__(get_path_segments(path))
 
     @property
     def path(self) -> Any:
+        '''Get the path'''
         return self.values[0]
 
     def __iter__(self):
@@ -232,23 +248,25 @@ class Path(_NumericOperand, _ListAppendOperand):
         return IfNotExists(self, self._to_operand(other))
 
     def set(self, value: Any) -> SetAction:
-        # Returns an update action that sets this attribute to the given value
+        ''' Returns an update action that sets this attribute to the given value '''
         return SetAction(self, self._to_operand(value))
 
     def remove(self) -> RemoveAction:
-        # Returns an update action that removes this attribute from the item
+        ''' Returns an update action that removes this attribute from the item '''
         return RemoveAction(self)
 
     def remove_list_elements(self, *indexes: int) -> ListRemoveAction:
+        ''' Returns an update action that removes list element(s) '''
         return ListRemoveAction(self, *indexes)
 
     def add(self, *values: Any) -> AddAction:
-        # Returns an update action that appends the given values to a set or mathematically adds a value to a number
+        '''Returns an update action that appends the given values to a set
+           or mathematically adds a value to a number'''
         value = values[0] if len(values) == 1 else values
         return AddAction(self, self._to_operand(value))
 
     def delete(self, *values: Any) -> DeleteAction:
-        # Returns an update action that removes the given values from a set attribute
+        ''' Returns an update action that removes the given values from a set attribute '''
         value = values[0] if len(values) == 1 else values
         return DeleteAction(self, self._to_operand(value))
 

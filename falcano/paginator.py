@@ -1,3 +1,4 @@
+# pylint: disable=unsubscriptable-object
 '''
 Iterator class for paging through results
 '''

@@ -1,3 +1,4 @@
+# pylint: disable=unsubscriptable-object,too-many-lines
 '''
 Classes for individual model attributes
 '''
@@ -7,9 +8,8 @@ import calendar
 import decimal
 import time
 from datetime import datetime, timedelta
-from dateutil.parser import parse
-from inspect import getmembers, getfullargspec
 import json
+from inspect import getmembers, getfullargspec
 from typing import (
     Optional,
     Union,
@@ -25,6 +25,7 @@ from typing import (
     Dict,
     overload,
 )
+from dateutil.parser import parse
 from dateutil.tz import tzutc
 from boto3.dynamodb.conditions import (
     Key, Attr
@@ -138,7 +139,8 @@ class Attribute(Generic[_T]):
 
     def __get__(self: _A, instance: Any, owner: Any) -> Union[_A, _T]:
         if self._is_map_attribute_class_object(instance):
-            # MapAttribute class objects store a local copy of the attribute with `attr_path` set to the document path.
+            # MapAttribute class objects store a local copy of the attribute
+            # with `attr_path` set to the document path.
             attr_name = instance._dynamo_to_python_attrs.get(self.attr_name, self.attr_name)
             return instance.__dict__.get(attr_name, None) or self
         if instance:
@@ -162,6 +164,9 @@ class Attribute(Generic[_T]):
         return value
 
     def get_value(self, value: Any) -> Any:
+        '''
+        Gets a serialized attribute value
+        '''
         serialized_dynamo_type = ATTR_TYPE_MAP[self.attr_type]
         return value.get(serialized_dynamo_type)
 
@@ -214,9 +219,11 @@ class Attribute(Generic[_T]):
     #     return Path(self).is_in(*values)
 
     def exists(self) -> 'Exists':
+        '''Return a condition that this attribute exists'''
         return Attr(self.attr_name).exists()
 
     def does_not_exist(self) -> 'NotExists':
+        '''Return a condition that this attribute does not exist'''
         return Attr(self.attr_name).not_exists()
 
     # def is_type(self):
@@ -248,21 +255,27 @@ class Attribute(Generic[_T]):
         return Path(self).__or__(other)
 
     def append(self, other: Any) -> 'ListAppend':
+        ''' List append '''
         return Path(self).append(other)
 
     def prepend(self, other: Any) -> 'ListAppend':
+        ''' List prepend '''
         return Path(self).prepend(other)
 
     def set(self, value: Any) -> 'SetAction':
+        ''' Set '''
         return Path(self).set(value)
 
     def remove(self) -> 'RemoveAction':
+        ''' Remove '''
         return Path(self).remove()
 
     def add(self, *values: Any) -> 'AddAction':
+        ''' Add '''
         return Path(self).add(*values)
 
     def delete(self, *values: Any) -> 'DeleteAction':
+        ''' Delete '''
         return Path(self).delete(*values)
 
 
@@ -272,11 +285,12 @@ class AttributeContainer(metaclass=AttributeContainerMeta):
     '''
 
     def __init__(self, _user_instantiated: bool = True, **attributes: Attribute) -> None:
-        # The `attribute_values` dictionary is used by the Attribute data descriptors in cls._attributes
-        # to store the values that are bound to this instance. Attributes store values in the dictionary
-        # using the `python_attr_name` as the dictionary key. "Raw" (i.e. non-subclassed) MapAttribute
-        # instances do not have any Attributes defined and instead use this dictionary to store their
-        # collection of name-value pairs.
+        # The `attribute_values` dictionary is used by the Attribute data descriptors in
+        # cls._attributes to store the values that are bound to this instance. Attributes
+        # store values in the dictionary using the `python_attr_name` as the dictionary
+        # key. "Raw" (i.e. non-subclassed) MapAttribute instances do not have any
+        # Attributes defined and instead use this dictionary to store their collection
+        # of name-value pairs.
         self.attribute_values: Dict[str, Any] = {}
         self._set_defaults(_user_instantiated=_user_instantiated)
         self._set_attributes(**attributes)
@@ -286,7 +300,7 @@ class AttributeContainer(metaclass=AttributeContainerMeta):
         '''
         Returns the attributes of this class as a mapping from `python_attr_name` => `attribute`.
         '''
-        # warnings.warn("`Model._get_attributes` is deprecated in favor of `Model.get_attributes` now")
+        # warnings.warn("`Model._get_attributes` is deprecated in favor of `Model.get_attributes`")
         return cls.get_attributes()
 
     @classmethod
@@ -545,29 +559,34 @@ class MapAttribute(Attribute[Mapping[_KT, _VT]], AttributeContainer):
     '''
     A Map Attribute
 
-    The MapAttribute class can be used to store a JSON document as "raw" name-value pairs, or
-    it can be subclassed and the document fields represented as class attributes using Attribute instances.
+    The MapAttribute class can be used to store a JSON document as "raw" name-value pairs,
+    or it can be subclassed and the document fields represented as class attributes using
+    Attribute instances.
 
-    To support the ability to subclass MapAttribute and use it as an AttributeContainer, instances of
-    MapAttribute behave differently based both on where they are instantiated and on their type.
-    Because of this complicated behavior, a bit of an introduction is warranted.
+    To support the ability to subclass MapAttribute and use it as an AttributeContainer,
+    instances of MapAttribute behave differently based both on where they are instantiated
+    and on their type. Because of this complicated behavior, a bit of an introduction
+    is warranted.
 
-    Models that contain a MapAttribute define its properties using a class attribute on the model.
+    Models that contain a MapAttribute define its properties using a class attribute
+    on the model.
     For example, below we define "MyModel" which contains a MapAttribute "my_map":
 
     class MyModel(Model):
        my_map = MapAttribute(attr_name="dynamo_name", default={})
 
-    When instantiated in this manner (as a class attribute of an AttributeContainer class), the MapAttribute
-    class acts as an instance of the Attribute class. The instance stores data about the attribute (in this
-    example the dynamo name and default value), and acts as a data descriptor, storing any value bound to it
-    on the `attribute_values` dictionary of the containing instance (in this case an instance of MyModel).
+    When instantiated in this manner (as a class attribute of an AttributeContainer class),
+    the MapAttribute class acts as an instance of the Attribute class. The instance stores
+    data about the attribute (in this example the dynamo name and default value), and acts
+    as a data descriptor, storing any value bound to it on the `attribute_values` dictionary
+    of the containing instance (in this case an instance of MyModel).
 
-    Unlike other Attribute types, the value that gets bound to the containing instance is a new instance of
-    MapAttribute, not an instance of the primitive type. For example, a UnicodeAttribute stores strings in
-    the `attribute_values` of the containing instance; a MapAttribute does not store a dict but instead stores
-    a new instance of itself. This difference in behavior is necessary when subclassing MapAttribute in order
-    to access the Attribute data descriptors that represent the document fields.
+    Unlike other Attribute types, the value that gets bound to the containing instance is a
+    new instance of MapAttribute, not an instance of the primitive type. For example, a
+    UnicodeAttribute stores strings in the `attribute_values` of the containing instance;
+    a MapAttribute does not store a dict but instead stores a new instance of itself.
+    This difference in behavior is necessary when subclassing MapAttribute in order to access
+    the Attribute data descriptors that represent the document fields.
 
     For example, below we redefine "MyModel" to use a subclass of MapAttribute as "my_map":
 
@@ -577,26 +596,28 @@ class MapAttribute(Attribute[Mapping[_KT, _VT]], AttributeContainer):
     class MyModel(Model):
         my_map = MyMapAttribute(attr_name="dynamo_name", default = {})
 
-    In order to set the value of my_internal_map on an instance of MyModel we need the bound value for "my_map"
-    to be an instance of MapAttribute so that it acts as a data descriptor:
+    In order to set the value of my_internal_map on an instance of MyModel we need the bound
+    value for "my_map" to be an instance of MapAttribute so that it acts as a data descriptor:
 
     MyModel().my_map.my_internal_map = {'foo': 'bar'}
 
     That is the attribute access of "my_map" must return a MyMapAttribute instance and not a dict.
 
     When an instance is used in this manner (bound to an instance of an AttributeContainer class),
-    the MapAttribute class acts as an AttributeContainer class itself. The instance does not store data
-    about the attribute, and does not act as a data descriptor. The instance stores name-value pairs in its
-    internal `attribute_values` dictionary.
+    the MapAttribute class acts as an AttributeContainer class itself. The instance does not store
+    data about the attribute, and does not act as a data descriptor. The instance stores name-value
+    pairs in its internal `attribute_values` dictionary.
 
-    Thus while MapAttribute multiply inherits from Attribute and AttributeContainer, a MapAttribute instance
-    does not behave as both an Attribute AND an AttributeContainer. Rather an instance of MapAttribute behaves
-    EITHER as an Attribute OR as an AttributeContainer, depending on where it was instantiated.
+    Thus while MapAttribute multiply inherits from Attribute and AttributeContainer, a MapAttribute
+    instance does not behave as both an Attribute AND an AttributeContainer. Rather an instance of
+    MapAttribute behaves EITHER as an Attribute OR as an AttributeContainer, depending on where it
+    was instantiated.
 
     So, how do we create this dichotomous behavior? Using the AttributeContainerMeta metaclass.
     All MapAttribute instances are initialized as AttributeContainers only. During construction of
-    AttributeContainer classes (subclasses of MapAttribute and Model), any instances that are class attributes
-    are transformed from AttributeContainers to Attributes (via the `make_attribute` method call).
+    AttributeContainer classes (subclasses of MapAttribute and Model), any instances that are class
+    attributes are transformed from AttributeContainers to Attributes
+    (via the `make_attribute` method call).
     '''
     attr_type = MAP
 
@@ -607,44 +628,51 @@ class MapAttribute(Attribute[Mapping[_KT, _VT]], AttributeContainer):
         self.attribute_kwargs = {arg: attributes.pop(
             arg) for arg in self.attribute_args if arg in attributes}
 
-        # Assume all instances should behave like an AttributeContainer. Instances that are intended to be
-        # used as Attributes will be transformed by AttributeContainerMeta during creation of the containing class.
-        # Because of this do not use MRO or cooperative multiple inheritance, call the parent class directly.
+        # Assume all instances should behave like an AttributeContainer. Instances that are
+        # intended to be used as Attributes will be transformed by AttributeContainerMeta during
+        # creation of the containing class. Because of this do not use MRO or cooperative
+        # multiple inheritance, call the parent class directly.
         AttributeContainer.__init__(self, **attributes)
 
-        # It is possible that attributes names can collide with argument names of Attribute.__init__.
+        # It is possible that attributes names can collide with argument names of
+        # Attribute.__init__.
         # Assume that this is the case if any of the following are true:
         #   - the user passed in other attributes that did not match any argument names
-        #   - this is a "raw" (i.e. non-subclassed) MapAttribute instance and attempting to store the attributes
-        #     cannot raise a ValueError (if this assumption is wrong, calling `make_attribute` removes them)
-        #   - the names of all attributes in self.attribute_kwargs match attributes defined on the class
+        #   - this is a "raw" (i.e. non-subclassed) MapAttribute instance and attempting to store
+        #     the attributes cannot raise a ValueError (if this assumption is wrong, calling
+        #     `make_attribute` removes them)
+        #   - the names of all attributes in self.attribute_kwargs match attributes defined on
+        #     the class
         if self.attribute_kwargs and (
-                attributes or self.is_raw() or all(arg in self.get_attributes() for arg in self.attribute_kwargs)):
+                attributes or self.is_raw() or all(arg in self.get_attributes()
+                                                   for arg in self.attribute_kwargs)):
             self._set_attributes(**self.attribute_kwargs)
 
     def _is_attribute_container(self):
         # Determine if this instance is being used as an AttributeContainer or an Attribute.
-        # AttributeContainer instances have an internal `attribute_values` dictionary that is removed
-        # by the `make_attribute` call during initialization of the containing class.
+        # AttributeContainer instances have an internal `attribute_values` dictionary that is
+        # removed by the `make_attribute` call during initialization of the containing class.
         return 'attribute_values' in self.__dict__
 
     def make_attribute(self):
         '''
         Make an attribute
         '''
-        # WARNING! This function is only intended to be called from the AttributeContainerMeta metaclass.
+        # WARNING! This function is only intended to be called from the
+        # AttributeContainerMeta metaclass.
         if not self._is_attribute_container():
             # This instance has already been initialized by another AttributeContainer class.
             return False
-        # During initialization the kwargs were stored in `attribute_kwargs`. Remove them and re-initialize the class.
+        # During initialization the kwargs were stored in `attribute_kwargs`. Remove them and
+        # re-initialize the class.
         kwargs = self.attribute_kwargs
         del self.attribute_kwargs
         del self.attribute_values
         Attribute.__init__(self, **kwargs)
         for name, attr in self.get_attributes().items():
             # Set a local attribute with the same name that shadows the class attribute.
-            # Because attr is a data descriptor and the attribute already exists on the class,
-            # we have to store the local copy directly into __dict__ to prevent calling attr.__set__.
+            # Because attr is a data descriptor and the attribute already exists on the class, we
+            # have to store the local copy directly into __dict__ to prevent calling attr.__set__.
             # Use deepcopy so that `attr_path` and any local attributes are also copied.
             self.__dict__[name] = deepcopy(attr)
         return True
@@ -653,7 +681,8 @@ class MapAttribute(Attribute[Mapping[_KT, _VT]], AttributeContainer):
         '''
         Update the attribute paths with the path segment
         '''
-        # WARNING! This function is only intended to be called from the AttributeContainerMeta metaclass.
+        # WARNING! This function is only intended to be called from the
+        # AttributeContainerMeta metaclass.
         if self._is_attribute_container():
             raise AssertionError(
                 "MapAttribute.update_attribute_paths called before MapAttribute.make_attribute")
@@ -681,9 +710,10 @@ class MapAttribute(Attribute[Mapping[_KT, _VT]], AttributeContainer):
     def __getitem__(self, item: _KT) -> _VT:  # type: ignore
         if self._is_attribute_container():
             return self.attribute_values[item]
-        # If this instance is being used as an Attribute, treat item access like the map dereference operator.
-        # This provides equivalence between DynamoDB's nested attribute access for map elements (MyMap.nestedField)
-        # and Python's item access for dictionaries (MyMap['nestedField']).
+        # If this instance is being used as an Attribute, treat item access like the map
+        # dereference operator. This provides equivalence between DynamoDB's nested attribute
+        # access for map elements (MyMap.nestedField) and Python's item access for dictionaries
+        # (MyMap['nestedField']).
         if self.is_raw():
             return getattr(self, item)
             # return Path(self.attr_path + [str(item)])  # type: ignore
@@ -722,14 +752,19 @@ class MapAttribute(Attribute[Mapping[_KT, _VT]], AttributeContainer):
         return super().__get__(instance, owner)  # type: ignore
 
     def __setattr__(self, name, value):
-        # "Raw" (i.e. non-subclassed) instances set their name-value pairs in the `attribute_values` dictionary.
+        # "Raw" (i.e. non-subclassed) instances set their name-value pairs in the
+        # `attribute_values` dictionary.
         # MapAttribute subclasses should set attributes via the Attribute descriptors.
         if self.is_raw() and self._is_attribute_container():
             self.attribute_values[name] = value
         else:
             object.__setattr__(self, name, value)
 
-    def __set__(self, instance: Any, value: Union[None, 'MapAttribute[_KT, _VT]', Mapping[_KT, _VT]]):
+    def __set__(
+        self,
+        instance: Any,
+        value: Union[None, 'MapAttribute[_KT, _VT]',Mapping[_KT, _VT]]
+    ):
         if isinstance(value, collections.abc.Mapping):
             value = type(self)(**value)  # type: ignore
         return super().__set__(instance, value)  # type: ignore
@@ -892,7 +927,7 @@ class ListAttribute(Attribute[List[_T]]):
     attr_type = LIST
     element_type: Any = None
 
-    def __init__(
+    def __init__( # pylint: disable=too-many-arguments
             self,
             hash_key: bool = False,
             range_key: bool = False,
@@ -951,10 +986,9 @@ class BooleanAttribute(Attribute[bool]):
     def serialize(self, value):
         if value is None:
             return None
-        elif value:
+        if value:
             return True
-        else:
-            return False
+        return False
 
     def deserialize(self, value):
         return bool(value)
@@ -975,9 +1009,9 @@ def _fast_parse_utc_datestring(datestring):
             _int(datestring[11:13]), _int(datestring[14:16]), _int(datestring[17:19]),
             _int(round(float(datestring[19:-5]) * 1e6)), tzutc()
         )
-    except (TypeError, ValueError):
+    except (TypeError, ValueError) as date_error:
         raise ValueError("Datetime string '{}' does not match format "
-                         "'%Y-%m-%dT%H:%M:%S.%f+0000'".format(datestring))
+                         "'%Y-%m-%dT%H:%M:%S.%f+0000'".format(datestring)) from date_error
 
 
 DESERIALIZE_CLASS_MAP: Dict[str, Attribute] = {
