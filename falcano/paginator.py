@@ -40,7 +40,7 @@ class Results:
         '''
         for record in records:
             self.records.append(
-                self.model._models[record[self.model.Meta.model_type]](**record))
+                self.model.models[record[self.model.Meta.model_type]](**record))
 
     def reset(self):
         '''

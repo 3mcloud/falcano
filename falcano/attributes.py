@@ -115,7 +115,6 @@ class Attribute(Generic[_T]):
 
         The model handles removing this, no action is needed.
         '''
-        pass
 
     @property
     def attr_name(self) -> Optional[str]:
@@ -149,7 +148,7 @@ class Attribute(Generic[_T]):
         return self
 
     def _is_map_attribute_class_object(self, instance: 'Attribute') -> bool:  # pylint: disable=no-self-use
-        return isinstance(instance, MapAttribute) and not instance._is_attribute_container()
+        return isinstance(instance, MapAttribute) and not instance.is_attribute_container()
 
     def serialize(self, value: Any) -> Any:  # pylint: disable=no-self-use
         '''
@@ -179,14 +178,14 @@ class Attribute(Generic[_T]):
         '''Return Key if this attribute is a hash or range key, Attr otherwise'''
         return Key if self.is_hash_key or self.is_range_key else Attr
     # def __eq__(self, other: Any) -> 'Comparison':  # type: ignore
-    #     if isinstance(other, MapAttribute) and other._is_attribute_container():
+    #     if isinstance(other, MapAttribute) and other.is_attribute_container():
     #         return Path(self).__eq__(other)
     #     if other is None or isinstance(other, Attribute):  # handle object identity comparison
     #         return self is other  # type: ignore
     #     return Path(self).__eq__(other)
 
     # def __ne__(self, other: Any) -> 'Comparison':  # type: ignore
-    #     if isinstance(other, MapAttribute) and other._is_attribute_container():
+    #     if isinstance(other, MapAttribute) and other.is_attribute_container():
     #         return Path(self).__ne__(other)
     #     if other is None or isinstance(other, Attribute):  # handle object identity comparison
     #         return self is not other  # type: ignore
@@ -232,7 +231,6 @@ class Attribute(Generic[_T]):
 
     def startswith(self, prefix: str) -> 'BeginsWith':
         '''Return a condition that this attribute starts with the prefix'''
-        # TODO: handle `Key` vs `Attr` for Condition Expression
         return self.attr_fn()(self.attr_name).begins_with(prefix)
 
     # def contains(self, item: Any) -> 'Contains':
@@ -648,10 +646,12 @@ class MapAttribute(Attribute[Mapping[_KT, _VT]], AttributeContainer):
                                                    for arg in self.attribute_kwargs)):
             self._set_attributes(**self.attribute_kwargs)
 
-    def _is_attribute_container(self):
-        # Determine if this instance is being used as an AttributeContainer or an Attribute.
-        # AttributeContainer instances have an internal `attribute_values` dictionary that is
-        # removed by the `make_attribute` call during initialization of the containing class.
+    def is_attribute_container(self):
+        '''
+        Determine if this instance is being used as an AttributeContainer or an Attribute.
+        AttributeContainer instances have an internal `attribute_values` dictionary that is
+        removed by the `make_attribute` call during initialization of the containing class.
+        '''
         return 'attribute_values' in self.__dict__
 
     def make_attribute(self):
@@ -660,7 +660,7 @@ class MapAttribute(Attribute[Mapping[_KT, _VT]], AttributeContainer):
         '''
         # WARNING! This function is only intended to be called from the
         # AttributeContainerMeta metaclass.
-        if not self._is_attribute_container():
+        if not self.is_attribute_container():
             # This instance has already been initialized by another AttributeContainer class.
             return False
         # During initialization the kwargs were stored in `attribute_kwargs`. Remove them and
@@ -683,7 +683,7 @@ class MapAttribute(Attribute[Mapping[_KT, _VT]], AttributeContainer):
         '''
         # WARNING! This function is only intended to be called from the
         # AttributeContainerMeta metaclass.
-        if self._is_attribute_container():
+        if self.is_attribute_container():
             raise AssertionError(
                 "MapAttribute.update_attribute_paths called before MapAttribute.make_attribute")
         for name in self.get_attributes().keys():
@@ -693,22 +693,22 @@ class MapAttribute(Attribute[Mapping[_KT, _VT]], AttributeContainer):
                 local_attr.update_attribute_paths(path_segment)
 
     def __eq__(self, other):
-        if self._is_attribute_container():
+        if self.is_attribute_container():
             return AttributeContainer.__eq__(self, other)
         return Attribute.__eq__(self, other)
 
     def __ne__(self, other):
-        if self._is_attribute_container():
+        if self.is_attribute_container():
             return AttributeContainer.__ne__(self, other)
         return Attribute.__ne__(self, other)
 
     def __iter__(self):
-        if self._is_attribute_container():
+        if self.is_attribute_container():
             return iter(self.attribute_values)
         return super().__iter__()
 
     def __getitem__(self, item: _KT) -> _VT:  # type: ignore
-        if self._is_attribute_container():
+        if self.is_attribute_container():
             return self.attribute_values[item]
         # If this instance is being used as an Attribute, treat item access like the map
         # dereference operator. This provides equivalence between DynamoDB's nested attribute
@@ -722,7 +722,7 @@ class MapAttribute(Attribute[Mapping[_KT, _VT]], AttributeContainer):
         raise AttributeError("'{}' has no attribute '{}'".format(self.__class__.__name__, item))
 
     def __setitem__(self, item, value):
-        if not self._is_attribute_container():
+        if not self.is_attribute_container():
             raise TypeError("'{}' object does not support item assignment".format(
                 self.__class__.__name__))
         if self.is_raw():
@@ -735,7 +735,7 @@ class MapAttribute(Attribute[Mapping[_KT, _VT]], AttributeContainer):
     def __getattr__(self, attr: str) -> _VT:
         # This should only be called for "raw" (i.e. non-subclassed) MapAttribute instances.
         # MapAttribute subclasses should access attributes via the Attribute descriptors.
-        if self.is_raw() and self._is_attribute_container():
+        if self.is_raw() and self.is_attribute_container():
             try:
                 return self.attribute_values[attr]
             except KeyError:
@@ -755,7 +755,7 @@ class MapAttribute(Attribute[Mapping[_KT, _VT]], AttributeContainer):
         # "Raw" (i.e. non-subclassed) instances set their name-value pairs in the
         # `attribute_values` dictionary.
         # MapAttribute subclasses should set attributes via the Attribute descriptors.
-        if self.is_raw() and self._is_attribute_container():
+        if self.is_raw() and self.is_attribute_container():
             self.attribute_values[name] = value
         else:
             object.__setattr__(self, name, value)

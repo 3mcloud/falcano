@@ -4,11 +4,6 @@ Falcano expression utilities
 '''
 import re
 from typing import Dict, List, Union
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from falcano.expressions.operands import Path
-
 
 PATH_SEGMENT_REGEX = re.compile(r'([^\[\]]+)((?:\[\d+\])*)$')
 

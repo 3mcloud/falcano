@@ -38,24 +38,26 @@ class _Operand:
                                         expression_attribute_values) for value in self.values]
         return self.format_string.format(*values)
 
-    def _serialize_value(self, value, placeholder_names, expression_attribute_values):
-        return value.serialize(placeholder_names, expression_attribute_values)
-
     def _to_operand(self, value: Union['_Operand', 'Attribute', Any]):
         if isinstance(value, _Operand):
             return value
         # prevent circular import -- Attribute imports Path
         from falcano.attributes import Attribute, MapAttribute # pylint: disable=import-outside-toplevel
-        if isinstance(value, MapAttribute) and value._is_attribute_container():
+        if isinstance(value, MapAttribute) and value.is_attribute_container():
             return self._to_value(value)
         return Path(value) if isinstance(value, Attribute) else self._to_value(value)
-
-    def _to_value(self, value):
-        return Value(value)
 
     def _type_check(self, *types):
         if self.short_attr_type and self.short_attr_type not in types:
             raise ValueError("The data type of '{}' must be one of {}".format(self, list(types)))
+
+    @classmethod
+    def _serialize_value(cls, value, placeholder_names, expression_attribute_values):
+        return value.serialize(placeholder_names, expression_attribute_values)
+
+    @classmethod
+    def _to_value(cls, value):
+        return Value(value)
 
 
 class _NumericOperand(_Operand):

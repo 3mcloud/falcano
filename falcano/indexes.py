@@ -131,7 +131,7 @@ class Index(metaclass=IndexMeta):
         )
 
     @classmethod
-    def _hash_key_attribute(cls):
+    def hash_key_attribute(cls):
         '''
         Returns the attribute class for the hash key
         '''
@@ -141,7 +141,7 @@ class Index(metaclass=IndexMeta):
         return None
 
     @classmethod
-    def _get_schema(cls) -> Dict:
+    def get_schema(cls) -> Dict:
         '''
         Returns the schema for this index
         '''

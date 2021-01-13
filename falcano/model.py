@@ -121,7 +121,7 @@ class MetaModel(AttributeContainerMeta):
 
     def store_parent_classes(self, cls):  # pylint: disable=no-self-use, bad-mcs-method-argument
         '''
-        Add this as a child to all parent class _models, recursively if it has a model_type
+        Add this as a child to all parent class models, recursively if it has a model_type
         '''
         # Skip if there is no type
         try:
@@ -133,7 +133,7 @@ class MetaModel(AttributeContainerMeta):
 
         while len(queue) > 0:
             cur_cls = queue.pop()
-            cur_cls._models[model_type.default] = cls
+            cur_cls.models[model_type.default] = cls
             # add all the parent's parents if they're not already in added
             for parent in cur_cls.__bases__:
                 if parent not in added and hasattr(parent, 'Meta'):
@@ -151,7 +151,7 @@ class Model(metaclass=MetaModel):  # pylint: disable=too-many-public-methods
     _dynamo_to_python_attrs = {}
     _indexes = None
     attribute_values = {}
-    _models = {}
+    models = {}
 
     def __init__(self,
                  hash_key: Optional[_KeyType] = None,
@@ -331,7 +331,7 @@ class Model(metaclass=MetaModel):  # pylint: disable=too-many-public-methods
             cls._index_classes = {}
             for _, index in getmembers(cls, lambda o: isinstance(o, Index)):
                 cls._index_classes[index.Meta.index_name] = index
-                schema = index._get_schema()
+                schema = index.get_schema()
                 idx = {
                     INDEX_NAME: index.Meta.index_name,
                     KEY_SCHEMA: schema.get(KEY_SCHEMA),
@@ -359,7 +359,7 @@ class Model(metaclass=MetaModel):  # pylint: disable=too-many-public-methods
         return cls._indexes
 
     @classmethod
-    def _get_schema(cls):
+    def get_schema(cls):
         '''
         Returns the schema for this table
         '''
@@ -395,7 +395,7 @@ class Model(metaclass=MetaModel):  # pylint: disable=too-many-public-methods
         '''
         logger.debug('CREATE THE TABLE')
 
-        schema = cls._get_schema()
+        schema = cls.get_schema()
 
         index_data = cls._get_indexes()
         if index_data.get(GLOBAL_SECONDARY_INDEXES) is not None:
@@ -470,7 +470,7 @@ class Model(metaclass=MetaModel):  # pylint: disable=too-many-public-methods
         kwargs = cls.get_operation_kwargs_from_class(**kwargs)
         res = table.get_item(**kwargs)
         if res and (data := res.get(ITEM)):
-            return Model._models[data[cls.Meta.model_type]](**data)
+            return Model.models[data[cls.Meta.model_type]](**data)
         raise DoesNotExist()
 
     @classmethod
@@ -578,7 +578,7 @@ class Model(metaclass=MetaModel):  # pylint: disable=too-many-public-methods
         '''
         select=None
         if index_name:
-            hash_attr = index_name._hash_key_attribute()
+            hash_attr = index_name.hash_key_attribute()
             select=ALL_PROJECTED_ATTRIBUTES
         else:
             hash_attr = cls.get_hash_key()
@@ -607,7 +607,7 @@ class Model(metaclass=MetaModel):  # pylint: disable=too-many-public-methods
         response = table.query(**query)
         return Results(Model, response)
 
-    def _serialize(self, attr_map=False, null_check=True) -> Dict[str, Any]:
+    def serialize(self, attr_map=False, null_check=True) -> Dict[str, Any]:
         '''
         Serializes all model attributes for use with DynamoDB
         :param attr_map: If True, then attributes are returned
@@ -638,7 +638,7 @@ class Model(metaclass=MetaModel):  # pylint: disable=too-many-public-methods
 
         return attrs
 
-    def _get_keys(self):
+    def get_keys(self):
         '''
         Returns the proper arguments for deleting
         '''
@@ -764,7 +764,7 @@ class Model(metaclass=MetaModel):  # pylint: disable=too-many-public-methods
         kwargs = self.get_operation_kwargs_from_instance(**kwargs) # pylint: disable=unexpected-keyword-arg
         table = self.resource().Table(self.Meta.table_name)
         res = table.update_item(**kwargs)[ATTRIBUTES]
-        return Model._models[res[self.Meta.model_type]](**res)
+        return Model.models[res[self.Meta.model_type]](**res)
 
     def save(self, condition=None, return_values=None) -> Dict[str, Any]:
         ''' Save a falcano model into dynamodb '''
@@ -857,7 +857,7 @@ class Model(metaclass=MetaModel):  # pylint: disable=too-many-public-methods
         :param null_check: If True, then attributes are checked for null.
         '''
         kwargs = {}
-        serialized = self._serialize(null_check=null_check)
+        serialized = self.serialize(null_check=null_check)
         kwargs[stringcase.snakecase(HASH_KEY)] = serialized.get(HASH)
         if RANGE in serialized:
             kwargs[stringcase.snakecase(RANGE_KEY)] = serialized.get(RANGE)
@@ -1416,9 +1416,9 @@ class BatchWrite(ModelContextManager):
         delete_items = []
         for item in self.pending_operations:
             if item[ACTION] == PUT:
-                put_items.append(item[ITEM]._serialize()[ATTRIBUTES])
+                put_items.append(item[ITEM].serialize()[ATTRIBUTES])
             elif item[ACTION] == DELETE:
-                delete_items.append(item[ITEM]._get_keys())
+                delete_items.append(item[ITEM].get_keys())
         self.pending_operations = []
         if not delete_items and not put_items:
             return
