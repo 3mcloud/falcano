@@ -11,3 +11,5 @@ ignore-docstrings=yes
 
 # Ignore imports when computing similarities.
 ignore-imports=no
+
+disable=cyclic-import
