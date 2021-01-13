@@ -190,6 +190,7 @@ COUNT = 'COUNT'
 SELECT_VALUES = [ALL_ATTRIBUTES, ALL_PROJECTED_ATTRIBUTES, SPECIFIC_ATTRIBUTES, COUNT]
 
 # These are the valid comparison operators for the Scan operation
+# pylint: disable=line-too-long
 # See: http://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_Scan.html#DDB-Scan-request-ScanFilter
 SEGMENT = 'Segment'
 TOTAL_SEGMENTS = 'TotalSegments'

@@ -180,7 +180,7 @@ def test_get_indexes():
 
 
 def test_get_schema():
-    schema = Person._get_schema()
+    schema = Person.get_schema()
     assert 'AttributeDefinitions' in schema
     assert len(schema['AttributeDefinitions']) == 2
     for att_def in schema['AttributeDefinitions']:
@@ -426,9 +426,8 @@ def test_query(mock_table_resource):
     )
 
 
-
 def test_serialize():
-    attrs = rick._serialize()
+    attrs = rick.serialize()
     assert attrs['HASH'] == 'person#1234'
     assert attrs['RANGE'] == 'person#ricksanchez'
     assert attrs['Attributes']['FirstName'] == 'Rick'
@@ -440,7 +439,7 @@ def test_serialize():
 
 
 def test_get_keys():
-    keys = rick._get_keys()
+    keys = rick.get_keys()
     assert keys['PK'] == 'person#1234'
     assert keys['SK'] == 'person#ricksanchez'
 

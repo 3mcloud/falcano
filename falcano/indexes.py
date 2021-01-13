@@ -1,3 +1,4 @@
+# pylint: disable=unsubscriptable-object
 '''
 Index support
 '''
@@ -49,7 +50,7 @@ class Index(metaclass=IndexMeta):
             raise ValueError('No projection defined, define a projection for this class')
 
     @classmethod
-    def count(
+    def count(  # pylint: disable=too-many-arguments
             cls,
             hash_key: _KeyType,
             range_key_condition: Optional[ComparisonCondition] = None,
@@ -72,7 +73,7 @@ class Index(metaclass=IndexMeta):
         )
 
     @classmethod
-    def query(
+    def query(  # pylint: disable=too-many-arguments
             cls,
             hash_key: _KeyType,
             range_key_condition: Optional[ComparisonCondition] = None,
@@ -101,7 +102,7 @@ class Index(metaclass=IndexMeta):
         )
 
     @classmethod
-    def scan(
+    def scan(  # pylint: disable=too-many-arguments
             cls,
             filter_condition: Optional[ComparisonCondition] = None,
             segment: Optional[int] = None,
@@ -130,7 +131,7 @@ class Index(metaclass=IndexMeta):
         )
 
     @classmethod
-    def _hash_key_attribute(cls):
+    def hash_key_attribute(cls):
         '''
         Returns the attribute class for the hash key
         '''
@@ -140,7 +141,7 @@ class Index(metaclass=IndexMeta):
         return None
 
     @classmethod
-    def _get_schema(cls) -> Dict:
+    def get_schema(cls) -> Dict:
         '''
         Returns the schema for this index
         '''
@@ -191,7 +192,7 @@ class LocalSecondaryIndex(Index):
     '''
 
 
-class Projection():
+class Projection():  # pylint: disable=too-few-public-methods
     '''
     A class for presenting projections
     '''
@@ -199,7 +200,7 @@ class Projection():
     non_key_attributes: Any = None
 
 
-class AllProjection(Projection):
+class AllProjection(Projection):  # pylint: disable=too-few-public-methods
     '''
     An ALL projection
     '''
