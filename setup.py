@@ -2,12 +2,11 @@
 '''
 Setup tools
 '''
-import re
-import subprocess
+import os
 from setuptools import setup, find_packages
 
 NAME = 'falcano'
-VERSION = '0.0.7'
+VERSION = os.getenv('RELEASE_VERSION', 'DEV')
 AUTHOR = 'Eric Walker'
 AUTHOR_EMAIL = 'ewalker3@mmm.com'
 DESCRIPTION = 'Falcano'
