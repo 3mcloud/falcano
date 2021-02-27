@@ -197,3 +197,26 @@ class TestModel(unittest.TestCase):
             got_friend = getter.get(FriendModel, 'friend#drue', 'friend#meta', attributes_to_get)
         got = got_friend.get().to_dict()
         assert want == got
+
+    def test_save_lists(self):
+        thingy = FriendToUpdate(
+            'update#first',
+            'update#2',
+            NumberAttr=2,
+            SetAttr={'A', 'B'},
+            ListAttr=['One', 2],
+            StringAttr='First'
+        )
+        thingy.save()
+        thingy = FriendToUpdate.get(
+            'update#first',
+            'update#2'
+        )
+        thingy.NumberAttr = 5
+        thingy.save()
+
+        thingy = FriendToUpdate.get(
+            'update#first',
+            'update#2'
+        )
+        assert thingy.ListAttr == ['One', 2]
