@@ -6,7 +6,7 @@ import pytest
 from _pytest.monkeypatch import MonkeyPatch
 from falcano.model import Model
 from falcano.attributes import (
-    UnicodeAttribute,
+    MapAttribute, UnicodeAttribute,
     UTCDateTimeAttribute,
     NumberAttribute,
     ListAttribute,
@@ -61,7 +61,7 @@ class FriendToUpdate(BaseModel):
     SetAttr = UnicodeSetAttribute(null=True)
     ListAttr = ListAttribute(null=True)
     StringAttr = UnicodeAttribute(null=True)
-
+    MapAttr = MapAttribute(null=True)
 
 class TestModel(unittest.TestCase):
     def setUp(self):
@@ -89,7 +89,7 @@ class TestModel(unittest.TestCase):
 
         self.friend_to_update = FriendToUpdate(
             'update#first', 'update#meta', NumberAttr=2,
-            SetAttr={'A', 'B'}, ListAttr=['One', 'Two'], StringAttr='First')
+            SetAttr={'A', 'B'}, ListAttr=['One', 'Two'], StringAttr='First', MapAttr={'init': 'value'})
         self.friend_to_update.save()
 
     def tearDown(self):
@@ -136,7 +136,8 @@ class TestModel(unittest.TestCase):
     def test_batch_get(self):
         items = [
             (self.friend1.PK, self.friend1.SK),
-            (self.group1.PK, self.group1.SK)
+            (self.group1.PK, self.group1.SK),
+            (self.friend_to_update.PK, self.friend_to_update.SK)
         ]
         records = BaseModel.batch_get(items)
         records = records.records
@@ -144,6 +145,9 @@ class TestModel(unittest.TestCase):
         assert records[0].SK == self.group1.SK
         assert records[1].PK == self.friend1.PK
         assert records[1].SK == self.friend1.SK
+        assert records[2].PK == self.friend_to_update.PK
+        assert records[2].SK == self.friend_to_update.SK
+
 
     def test_update(self):
         expected = {
@@ -153,13 +157,15 @@ class TestModel(unittest.TestCase):
             'PK': 'update#first',
             'SK': 'update#meta',
             'SetAttr': {'Alphabet', 'A', 'B'},
-            'Type': 'update_friend'
+            'Type': 'update_friend',
+            'MapAttr': {'test': 'ok'}
         }
         self.friend_to_update.update(actions=[
             FriendToUpdate.NumberAttr.set(FriendToUpdate.NumberAttr - 5),
             FriendToUpdate.SetAttr.add({'Alphabet'}),
             FriendToUpdate.StringAttr.remove(),
-            FriendToUpdate.ListAttr.set(FriendToUpdate.ListAttr.append(['three', 'four']))
+            FriendToUpdate.ListAttr.set(FriendToUpdate.ListAttr.append(['three', 'four'])),
+            FriendToUpdate.MapAttr.set({'test':'ok'})
         ])
         got = BaseModel.get(
             self.friend_to_update.PK,
@@ -173,15 +179,15 @@ class TestModel(unittest.TestCase):
                                    FriendModel.Name.eq('Dan Rue'))
             writer.delete(self.friend2)
             writer.save(new_friend)
-            action = FriendToUpdate.NumberAttr.add(5)
-            writer.update(self.friend_to_update, [
-                action
-            ], condition=FriendToUpdate.NumberAttr.eq(2))
+            actions = [FriendToUpdate.NumberAttr.add(5), FriendToUpdate.MapAttr.set({'test': 'ok'})]
+            writer.update(self.friend_to_update, actions, condition=FriendToUpdate.NumberAttr.eq(2))
+
         with pytest.raises(Exception):
             BaseModel.get(self.friend2.PK, self.friend2.SK)
         BaseModel.get(new_friend.PK, new_friend.SK)
         assert self.friend_to_update.NumberAttr + \
             5 == BaseModel.get(self.friend_to_update.PK, self.friend_to_update.SK).NumberAttr
+        assert BaseModel.get(self.friend_to_update.PK, self.friend_to_update.SK).MapAttr.as_dict() == {'test': 'ok'}
 
     def test_transact_get(self):
         want = self.friend1.to_dict()
@@ -197,3 +203,34 @@ class TestModel(unittest.TestCase):
             got_friend = getter.get(FriendModel, 'friend#drue', 'friend#meta', attributes_to_get)
         got = got_friend.get().to_dict()
         assert want == got
+
+    def test_transact_get_with_map_and_list(self):
+        want = self.friend_to_update.to_dict()
+
+        with BaseModel.transact_get() as getter:
+            got_friend_to_update = getter.get(FriendToUpdate, self.friend_to_update.PK, self.friend_to_update.SK)
+        got = got_friend_to_update.get().to_dict()
+        assert want == got
+
+    def test_save_lists(self):
+        thingy = FriendToUpdate(
+            'update#first',
+            'update#2',
+            NumberAttr=2,
+            SetAttr={'A', 'B'},
+            ListAttr=['One', 2],
+            StringAttr='First'
+        )
+        thingy.save()
+
+        thingy = FriendToUpdate.get(
+            'update#first',
+            'update#2'
+        )
+        thingy.save()
+
+        thingy = FriendToUpdate.get(
+            'update#first',
+            'update#2'
+        )
+        assert thingy.ListAttr == ['One', 2]

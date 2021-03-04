@@ -809,10 +809,6 @@ class MapAttribute(Attribute[Mapping[_KT, _VT]], AttributeContainer):
             attr_class = self._get_serialize_class(key, val)
             if attr_class is None:
                 continue
-            if attr_class.attr_type:
-                attr_key = ATTR_TYPE_MAP[attr_class.attr_type]
-            else:
-                attr_key = _get_key_for_serialize(val)
 
             # If this is a subclassed MapAttribute, there may be an alternate attr name
             attr = self.get_attributes().get(key)
@@ -823,7 +819,7 @@ class MapAttribute(Attribute[Mapping[_KT, _VT]], AttributeContainer):
                 # Check after we serialize in case the serialized value is null
                 continue
 
-            rval[attr_name] = {attr_key: serialized}
+            rval[attr_name] = serialized
 
         return rval
 
@@ -952,30 +948,15 @@ class ListAttribute(Attribute[List[_T]]):
         '''
         Encode the given list of objects into a list of AttributeValue types.
         '''
-        rval = []
-        for val in values:
-            attr_class = (self.element_type()
-                          if self.element_type
-                          else _get_class_for_serialize(val))
-            if attr_class.attr_type:
-                attr_key = ATTR_TYPE_MAP[attr_class.attr_type]
-            else:
-                attr_key = _get_key_for_serialize(val)
-            rval.append({attr_key: attr_class.serialize(val)})
-        return rval
+
+        return values
 
     def deserialize(self, values):  # pylint: disable=arguments-differ
         '''
         Decode from list of AttributeValue types.
         '''
-        deserialized_lst = []
-        for val in values:
-            class_for_deserialize = self.element_type() \
-                if self.element_type else _get_class_for_deserialize(val)
-            attr_value = _get_value_for_deserialize(val)
-            deserialized_lst.append(class_for_deserialize.deserialize(attr_value))
-        return deserialized_lst
 
+        return values
 
 class BooleanAttribute(Attribute[bool]):
     '''

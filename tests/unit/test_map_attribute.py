@@ -26,7 +26,7 @@ def test_map_overridden_attrs_serialize():
         'overridden_number_attr': 10,
         'overridden_unicode_attr': "Hello"
     }
-    expected = {'number_attr': {'N': 10}, 'unicode_attr': {'S': 'Hello'}}
+    expected = {'number_attr': 10, 'unicode_attr': 'Hello'}
     assert TestCustomAttrMap().serialize(attribute) == expected
 
 def test_additional_attrs_deserialize():
@@ -67,7 +67,6 @@ def test_defaults():
     assert item.validate()
     assert TestDefaultsMap().serialize(item) == {
         'map_field': {
-            'M': {}
         }
     }
 

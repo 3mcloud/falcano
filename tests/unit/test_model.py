@@ -46,6 +46,8 @@ rick = Person(
     FirstName="Rick",
     LastName="Sanchez",
     Age=70,
+    ValueList=[1,'2'],
+    ValueMap={'test': 'ok'}
 )
 
 morty = Person(
@@ -151,7 +153,7 @@ def test_get_hash_key():
     hash_key = Person.get_hash_key()
     assert isinstance(hash_key, UnicodeAttribute)
     assert hash_key.is_hash_key
-    
+
 
 def test_get_range_key():
     range_key = Person.get_range_key()
@@ -512,7 +514,9 @@ def test_transact_write(mock_client):
                         'Age': {'N': '70'},
                         'FirstName': {'S': 'Rick'},
                         'LastName': {'S': 'Sanchez'},
-                        'Type': {'S': 'person'}
+                        'Type': {'S': 'person'},
+                        'ValueList': {'L': [{'N': '1'}, {'S': '2'}]},
+                        'ValueMap': {'M': {'test': {'S': 'ok'}}}
                     }
                }
             },
@@ -663,7 +667,10 @@ def test_save(mock_table_resource):
             'LastName': 'Sanchez',
             'PK': 'person#1234',
             'SK': 'person#ricksanchez',
-            'Type': 'person'},
+            'Type': 'person',
+            'ValueList': [1, '2'],
+            'ValueMap': {'test': 'ok'}
+        },
         ReturnValues='NONE'
     )
 
@@ -879,7 +886,7 @@ def test_get_save_args():
     save_args = rick._get_save_args(item=False, attributes=False, null_check=False)
     assert save_args == {'hash_key': 'person#1234', 'range_key': 'person#ricksanchez'}
     save_args = rick._get_save_args(item=True, attributes=True, null_check=True)
-    assert save_args == {'hash_key': 'person#1234', 'range_key': 'person#ricksanchez', 'attributes': {'Age': 70, 'FirstName': 'Rick', 'LastName': 'Sanchez', 'PK': 'person#1234', 'SK': 'person#ricksanchez', 'Type': 'person', 'ValueMap': {'key': {'S': 'val'}}}, 'item': {'Age': 70, 'FirstName': 'Rick', 'LastName': 'Sanchez', 'PK': 'person#1234', 'SK': 'person#ricksanchez', 'Type': 'person', 'ValueMap': {'key': {'S': 'val'}}}}
+    assert save_args == {'hash_key': 'person#1234', 'range_key': 'person#ricksanchez', 'attributes': {'Age': 70, 'FirstName': 'Rick', 'LastName': 'Sanchez', 'PK': 'person#1234', 'SK': 'person#ricksanchez', 'Type': 'person', 'ValueList': [1,'2'],'ValueMap': {'key': 'val'}}, 'item': {'Age': 70, 'FirstName': 'Rick', 'LastName': 'Sanchez', 'PK': 'person#1234', 'SK': 'person#ricksanchez', 'Type': 'person', 'ValueList': [1,'2'], 'ValueMap': {'key': 'val'}}}
 
 
 def test_get_operation_kwargs_from_instance():
