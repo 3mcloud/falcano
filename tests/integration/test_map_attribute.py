@@ -74,7 +74,7 @@ class TestMapAttribute(unittest.TestCase):
                 billing_mode = 'PAY_PER_REQUEST'
             PK = UnicodeAttribute(hash_key=True)
             SK = UnicodeAttribute(range_key=True)
-            outer_map = OuterMapAttribute()
+            outer_map = MapAttribute()
             outer_list = ListAttribute()
             Type = UnicodeAttribute(default='test_nested_map')
 
@@ -87,7 +87,7 @@ class TestMapAttribute(unittest.TestCase):
                 },
             },
             'outer_list': [
-                OuterMapAttribute(**{'mid_map': {'baz': 'qux'}}),
+                {'mid_map': {'baz': 'qux'}},
             ]
         }
         test_model = MyModel(**create_dict)
@@ -118,7 +118,7 @@ class TestMapAttribute(unittest.TestCase):
                 billing_mode = 'PAY_PER_REQUEST'
             PK = UnicodeAttribute(hash_key=True)
             SK = UnicodeAttribute(range_key=True)
-            outer_map = OuterMapAttribute()
+            outer_map = MapAttribute()
             outer_list = ListAttribute()
             Type = UnicodeAttribute(default='test_nested_map')
 
@@ -131,7 +131,7 @@ class TestMapAttribute(unittest.TestCase):
                 },
             },
             'outer_list': [
-                OuterMapAttribute(**{'mid_map': {'baz': 'qux'}}),
+                {'mid_map': {'baz': 'qux'}},
             ]
         }
         test_model = MyModel(**create_dict)
