@@ -214,8 +214,8 @@ class Attribute(Generic[_T]):
         '''Return a condition that this attribute is equal to the value'''
         return self.attr_fn()(self.attr_name).eq(value)
 
-    # def is_in(self, *values: Any) -> 'In':
-    #     return Path(self).is_in(*values)
+    def is_in(self, *values: Any) -> 'In':
+        return Attr(self).is_in(*values)
 
     def exists(self) -> 'Exists':
         '''Return a condition that this attribute exists'''

@@ -427,6 +427,22 @@ def test_query(mock_table_resource):
         Select='SPECIFIC_ATTRIBUTES', ExpressionAttributeNames={'#0': 'FirstName', '#1': 'LastName'}
     )
 
+    Person.query(
+        morty.PK,
+        range_key_condition=Person.SK.startswith("person"),
+        filter_condition=Person.LastName.is_in(["Smith", "Sanchez"]),
+        consistent_read=True,
+        limit=1,
+        attributes_to_get=['FirstName', 'LastName'],
+        page_size=20
+    )
+    mock_table.query.assert_called_with(
+        TableName='unit-test-table',
+        KeyConditionExpression=Person.get_hash_key().eq(morty.PK) & Person.SK.startswith("person"),
+        FilterExpression=Person.LastName.is_in(["Smith", "Sanchez"]), ConsistentRead=True, Limit=20, ProjectionExpression='#0, #1',
+        Select='SPECIFIC_ATTRIBUTES', ExpressionAttributeNames={'#0': 'FirstName', '#1': 'LastName'}
+    )
+
 
 def test_serialize():
     attrs = rick.serialize()
