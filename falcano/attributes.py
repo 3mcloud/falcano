@@ -216,7 +216,7 @@ class Attribute(Generic[_T]):
 
     def is_in(self, *values: Any) -> 'In':
         ''' Return a condition that the value is in a set of values '''
-        return Attr(self).is_in(*values)
+        return self.attr_fn()(self.attr_name).is_in(*values)
 
     def exists(self) -> 'Exists':
         '''Return a condition that this attribute exists'''
