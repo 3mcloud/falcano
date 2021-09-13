@@ -369,6 +369,14 @@ class Model(metaclass=MetaModel):  # pylint: disable=too-many-public-methods
             TABLE_NAME: cls.Meta.table_name,
             BILLING_MODE: cls.Meta.billing_mode
         }
+        
+        # Adds capacity units to table if billing mode is PROVISIONED_THROUGHPUT
+        if cls.Meta.billing_mode != PAY_PER_REQUEST_BILLING_MODE:
+            schema[PROVISIONED_THROUGHPUT] = {
+                READ_CAPACITY_UNITS: cls.Meta.read_capacity_units,
+                WRITE_CAPACITY_UNITS: cls.Meta.write_capacity_units,
+            }
+        
         for attr_name, attr_cls in cls.get_attributes():
             if attr_cls.is_hash_key or attr_cls.is_range_key:
                 schema[ATTR_DEFINITIONS].append({
