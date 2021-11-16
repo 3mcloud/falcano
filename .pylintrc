@@ -12,4 +12,4 @@ ignore-docstrings=yes
 # Ignore imports when computing similarities.
 ignore-imports=no
 
-disable=cyclic-import
+disable=cyclic-import,consider-using-f-string,consider-using-dict-items,arguments-renamed,use-dict-literal
