@@ -183,7 +183,7 @@ class Model(metaclass=MetaModel):  # pylint: disable=too-many-public-methods
         read_timeout_seconds = 5
         billing_mode = PAY_PER_REQUEST_BILLING_MODE
         table_name = os.getenv('DYNAMODB_TABLE')
-        region = os.getenv('FALCANO_REGION_OVERRIDE', os.getenv('AWS_DEFAULT_REGION', 'us-east-1'))
+        region_override = os.getenv('FALCANO_REGION_OVERRIDE', None)
         host = os.getenv('ENDPOINT_URL', None)
         _table = None
         separator = '#'
@@ -201,7 +201,10 @@ class Model(metaclass=MetaModel):  # pylint: disable=too-many-public-methods
             '''
             Setter for the table name
             '''
-            dynamodb = boto3.client('dynamodb', self.region, endpoint_url=self.host)
+            if self.region_override:
+                dynamodb = boto3.client('dynamodb', self.region_override, endpoint_url=self.host)
+            else:
+                dynamodb = boto3.client('dynamodb', endpoint_url=self.host)
             self._table = dynamodb.Table(name)
 
     def _set_defaults(self, _user_instantiated: bool = True) -> None:
