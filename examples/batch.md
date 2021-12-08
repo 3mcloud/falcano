@@ -3,7 +3,7 @@
 Falcano supports batch writes and reads!
 These are particularly useful if you are loading or fetching large quantities of data to/from DynamoDB.
 
-Suppose that you are working for a bank who wants you to transfer both credit card information, and account transaction data, to a single table in DynamoDB. 
+Suppose that you are working for a bank who wants you to transfer both credit card information, and account transaction data, to a single table in DynamoDB.
 You are given 2 CSV files, where the credit card info data is in the following format in the first file:
 
 ```csv
@@ -12,6 +12,7 @@ Card Type,Issuing Bank,Card Number,Card Holder's Name,CVV/CVV2,Issue Date,Expiry
 Visa,Chase,4431465245886276,Frank Q Ortiz,362,09/2016,09/2034,7,1247,103700
 Discover,Discover,6224764404044446,Tony E Martinez,035,06/2012,06/2030,23,6190,92900
 ```
+
 and the transaction data is in the following format in the second file:
 
 ```csv
@@ -100,12 +101,14 @@ class CreditCard(BaseModel):
     DoesNotExist = DoesNotExist
 
 ```
-If the table doesn't already exist, we need to create it before batch inserting items. 
+
+If the table doesn't already exist, we need to create it before batch inserting items.
 
 ```python
 BaseModel.create_table(wait=True)
 ```
-From here, we will use the csv library, in conjunction with the Falcano batch writer, to add a record for each row of each CSV file to a single batch, and commit all of this data to DynamoDB. 
+
+From here, we will use the csv library, in conjunction with the Falcano batch writer, to add a record for each row of each CSV file to a single batch, and commit all of this data to DynamoDB.
 
 ```python
 batch_writer = BaseModel.batch_write()
@@ -152,8 +155,8 @@ with open('bt.csv', newline='') as f:
 batch_writer.commit()
 ```
 
-Now that we have inserted all of the data from both files, we can use Falcanos batch reader to fetch large quantities of this data, using the PKs and SKs of the items to fetch. 
- 
+Now that we have inserted all of the data from both files, we can use Falcanos batch reader to fetch large quantities of this data, using the PKs and SKs of the items to fetch.
+
 ```python
 items = [
     ('credit_card#4431465245886276', 'credit_card#visa'),
@@ -169,3 +172,5 @@ records = BaseModel.batch_get(items)
 print(records.collection())
 
 ```
+
+<!-- add what the output of the above would be and the difference from the output of batch_get() or scan() and the .collection() of those results -->
