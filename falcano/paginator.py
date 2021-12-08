@@ -72,43 +72,80 @@ class Results:
         if output is None:
             output = {}
 
-        try:
-            record = next(self)
-        except StopIteration:
-            return output
+        for record in self:
+            # Store the sort_key name of this item. We'll use this to know
+            # what value to target for the item ID
+            id_attr = sort_key
+            # Get the items sort key
+            key = getattr(record, sort_key)
+            item_parts = key.split(record.Meta.separator)
+            # This tells us what type of item it is. Presumable all PK are the same, we split on SK
+            item_type = item_parts[0]
+            tmp_pk = getattr(record, record.get_hash_key().attr_name)
+            if item_type == tmp_pk.split(record.Meta.separator)[0]:
+                # This is the primary item for the type
+                id_attr = primary_key
 
-        # Store the sort_key name of this item. We'll use this to know
-        # what value to target for the item ID
-        id_attr = sort_key
-        # Get the items sort key
-        key = getattr(record, sort_key)
-        item_parts = key.split(record.Meta.separator)
-        # This tells us what type of item it is. Presumable all PK are the same, we split on SK
-        item_type = item_parts[0]
-        tmp_pk = getattr(record, record.get_hash_key().attr_name)
-        if item_type == tmp_pk.split(record.Meta.separator)[0]:
-            # This is the primary item for the type
-            id_attr = primary_key
+            # Get the item as a dict, set the ID to id_attr attribute
+            item = record.to_dict(primary_key=id_attr, convert_decimal=True)
 
-        # Get the item as a dict, set the ID to id_attr attribute
-        item = record.to_dict(primary_key=id_attr, convert_decimal=True)
+            # New thing found, make it a dict
+            if item_type not in output:
+                output[item_type] = item
+            # Multiple things exist, convert from dict to list
+            elif isinstance(output[item_type], dict):
+                output[item_type] = [
+                    output[item_type],
+                    item
+                ]
+            # Thing is a list, append this item to it
+            elif isinstance(output[item_type], list):
+                output[item_type].append(item)
 
-        # New thing found, make it a dict
-        if item_type not in output:
-            output[item_type] = item
-        # Multiple things exist, convert from dict to list
-        elif isinstance(output[item_type], dict):
-            output[item_type] = [
-                output[item_type],
-                item
-            ]
-        # Thing is a list, append this item to it
-        elif isinstance(output[item_type], list):
-            output[item_type].append(item)
+        return output
 
-        # Process the next thing
-        return self.collection(
-            output=output,
-            primary_key=primary_key,
-            sort_key=sort_key
-        )
+        # # Recursion Version
+
+        # if output is None:
+        #     output = {}
+
+        # try:
+        #     record = next(self)
+        # except StopIteration:
+        #     return output
+
+        # # Store the sort_key name of this item. We'll use this to know
+        # # what value to target for the item ID
+        # id_attr = sort_key
+        # # Get the items sort key
+        # key = getattr(record, sort_key)
+        # item_parts = key.split(record.Meta.separator)
+        # # This tells us what type of item it is. Presumable all PK are the same, we split on SK
+        # item_type = item_parts[0]
+        # tmp_pk = getattr(record, record.get_hash_key().attr_name)
+        # if item_type == tmp_pk.split(record.Meta.separator)[0]:
+        #     # This is the primary item for the type
+        #     id_attr = primary_key
+
+        # # Get the item as a dict, set the ID to id_attr attribute
+        # item = record.to_dict(primary_key=id_attr, convert_decimal=True)
+
+        # # New thing found, make it a dict
+        # if item_type not in output:
+        #     output[item_type] = item
+        # # Multiple things exist, convert from dict to list
+        # elif isinstance(output[item_type], dict):
+        #     output[item_type] = [
+        #         output[item_type],
+        #         item
+        #     ]
+        # # Thing is a list, append this item to it
+        # elif isinstance(output[item_type], list):
+        #     output[item_type].append(item)
+
+        # # Process the next thing
+        # return self.collection(
+        #     output=output,
+        #     primary_key=primary_key,
+        #     sort_key=sort_key
+        # )
