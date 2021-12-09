@@ -103,3 +103,4 @@ class Results:
                 output[item_type].append(item)
 
         return output
+        
