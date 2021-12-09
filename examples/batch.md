@@ -174,3 +174,11 @@ print(records.collection())
 ```
 
 <!-- add what the output of the above would be and the difference from the output of batch_get() or scan() and the .collection() of those results -->
+
+<!-- 
+    batch_get does not return all the data in one package, but rather in smaller batches of data (up to 100 batches)
+    thus, the output would be an ?array? of tables
+    .collection() combines all these batches into one output
+    this would include all of the items, with their corresponding credit card number, bank transaction, etc
+
+ --!>
