@@ -23,4 +23,5 @@ jobs:
       - name: Unit
         env:
           DYNAMODB_TABLE: unit-test-table
+          AWS_DEFAULT_REGION: us-east-1
         run: python -m pytest -vvv --cov=falcano tests/unit
