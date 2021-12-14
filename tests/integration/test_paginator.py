@@ -38,16 +38,6 @@ class Person(BaseModel):
     ValueMap = MapAttribute()
     DoesNotExist = DoesNotExist
 
-class SmallPerson(BaseModel):
-    Type = UnicodeAttribute(default='person')
-    FirstName = UnicodeAttribute()
-    LastName = UnicodeAttribute()
-    Age = NumberAttribute(default=0)
-    CreateDate = UTCDateTimeAttribute(attr_name='CreateDateTime')
-    ValueList = ListAttribute()
-    ValueMap = MapAttribute()
-    DoesNotExist = DoesNotExist
-
 
 class TestPaginator(unittest.TestCase):
     @classmethod
@@ -59,7 +49,6 @@ class TestPaginator(unittest.TestCase):
         primary = 0
         secondary = 2000
         person_lst = []
-        small_person_lst = []
 
         sys.setrecursionlimit(100)
 
@@ -74,7 +63,6 @@ class TestPaginator(unittest.TestCase):
                 ValueMap={'test': 'ok'}
             )
             
-            if primary < 5: small_person_lst.append(person) #random small number
             person_lst.append(person)
 
             primary+=1
@@ -85,28 +73,19 @@ class TestPaginator(unittest.TestCase):
             for person in person_lst:
                 batch.save(person)
         
-        SmallPerson.create_table()
-        with SmallPerson.batch_write() as batch:
-            for person in small_person_lst:
-                batch.save(person)
-
     @classmethod
     def tearDownClass(self):
         with Person.batch_write() as batch:
             for object in Person.scan():
                 batch.delete(object)
 
-        with SmallPerson.batch_write() as batch:
-            for object in SmallPerson.scan():
-                batch.delete(object)
-        
-        sys.setrecursionlimit(1000)
+        sys.setrecursionlimit(1000) # set sys back to default recursion limit
 
     def test_paginator_for_recursion_depth_plus_one(self):
         Person.scan().collection()
 
     def test_reset(self):
-        results = SmallPerson.scan()
+        results = Person.scan()
         person = next(iter(results))
         person2 = next(iter(results))
 
