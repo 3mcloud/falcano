@@ -50,7 +50,8 @@ class SmallPerson(BaseModel):
 
 
 class TestPaginator(unittest.TestCase):
-    def setUp(self):
+    @classmethod
+    def setUpClass(self):
         self.monkeypatch = MonkeyPatch()
         self.monkeypatch.setenv('AWS_ACCESS_KEY_ID', 'fakeMyKeyId')
         self.monkeypatch.setenv('AWS_SECRET_ACCESS_KEY', 'fakeMySecret')
@@ -89,8 +90,8 @@ class TestPaginator(unittest.TestCase):
             for person in small_person_lst:
                 batch.save(person)
 
-
-    def tearDown(self):
+    @classmethod
+    def tearDownClass(self):
         with Person.batch_write() as batch:
             for object in Person.scan():
                 batch.delete(object)
