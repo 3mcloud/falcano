@@ -114,6 +114,7 @@ class TestPaginator(unittest.TestCase):
         results = SmallPerson.scan()
         person = next(iter(results))
         person2 = next(iter(results))
+        
         results.reset()
         assert person.to_dict() == next(iter(results)).to_dict()
         assert person2.to_dict() == next(iter(results)).to_dict()
