@@ -102,19 +102,14 @@ class TestPaginator(unittest.TestCase):
         
         sys.setrecursionlimit(1000)
 
-
-    def test_paginator_for_recursion_depth(self):
-        try: 
-            Person.scan().collection()
-        except RecursionError:
-            pytest.fail("Paginator test failed on 1000+ data")
-
+    def test_paginator_for_recursion_depth_plus_one(self):
+        Person.scan().collection()
 
     def test_reset(self):
         results = SmallPerson.scan()
         person = next(iter(results))
         person2 = next(iter(results))
-        
+
         results.reset()
         assert person.to_dict() == next(iter(results)).to_dict()
         assert person2.to_dict() == next(iter(results)).to_dict()
